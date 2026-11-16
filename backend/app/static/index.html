@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contract Analyst</title>
+<style>
+  :root {
+    --bg: #f6f6f3; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e2e1dc;
+    --accent: #2f5d8a; --accent-ink: #ffffff; --chip: #e8eef5;
+    --high: #b3261e; --med: #b26a00; --low: #3b7a3b; --warn-bg: #fff6e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #a09f98; --line: #34332f;
+      --accent: #7fa8d6; --accent-ink: #10161d; --chip: #26313d;
+      --high: #f2867e; --med: #e6ad55; --low: #8cc58c; --warn-bg: #2e2716;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; }
+  header small { color: var(--muted); }
+  main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  input, textarea, button { font: inherit; color: inherit; }
+  input[type=text], input[type=password], textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+  textarea { resize: vertical; min-height: 64px; }
+  button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .stack > * + * { margin-top: 8px; }
+  .docs { list-style: none; margin: 12px 0 0; padding: 0; }
+  .docs li { padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+  .docs li:hover { background: var(--bg); }
+  .docs li.active { border-color: var(--accent); }
+  .docs .name { font-weight: 600; overflow-wrap: anywhere; }
+  .status { font-size: 12px; color: var(--muted); }
+  .status.failed { color: var(--high); }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tabs button { background: transparent; color: var(--ink); border-color: var(--line); }
+  .tabs button.active { border-color: var(--accent); color: var(--accent); }
+  .warn { background: var(--warn-bg); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  .answer { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; border: 1px solid var(--line); border-radius: 8px; min-height: 48px; }
+  .answer h4 { margin: 10px 0 4px; font-size: 15px; white-space: normal; }
+  .cite { padding: 0 6px; margin: 0 1px; font-size: 12px; border-radius: 4px; border: 0; background: var(--chip); color: var(--accent); vertical-align: 1px; }
+  .cite.invalid { color: var(--high); text-decoration: line-through; }
+  .sources { margin-top: 14px; }
+  .source { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+  .source.flash { border-color: var(--accent); }
+  .source summary { cursor: pointer; font-size: 13px; }
+  .source pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 ui-monospace, Consolas, monospace; margin: 8px 0 0; }
+  .risk { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+  .risk.High { border-left-color: var(--high); } .risk.Medium { border-left-color: var(--med); } .risk.Low { border-left-color: var(--low); }
+  .risk .sev { font-size: 12px; font-weight: 700; }
+  .risk.High .sev { color: var(--high); } .risk.Medium .sev { color: var(--med); } .risk.Low .sev { color: var(--low); }
+  .meta { font-size: 13px; color: var(--muted); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > input { flex: 1 1 180px; width: auto; }
+  progress { width: 100%; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Contract Analyst</h1>
+  <small id="health">checking server…</small>
+</header>
+<main>
+  <section class="panel">
+    <h2>Upload</h2>
+    <form id="upload" class="stack">
+      <input type="file" id="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.tif,.tiff" required>
+      <input type="password" id="pdfpw" placeholder="PDF password (if protected)" autocomplete="off">
+      <button type="submit">Upload &amp; process</button>
+      <div id="uploadMsg" class="meta"></div>
+    </form>
+    <ul class="docs" id="docs"></ul>
+  </section>
+
+  <section class="panel" id="workspace">
+    <div id="empty" class="meta">Upload or select a document.</div>
+    <div id="docView" class="hidden">
+      <div class="row" style="justify-content:space-between">
+        <strong id="docTitle"></strong>
+        <button class="secondary" id="deleteDoc">Delete</button>
+      </div>
+      <div id="docMeta" class="meta"></div>
+      <div id="docWarnings"></div>
+      <div class="tabs" style="margin-top:12px">
+        <button data-tab="ask" class="active">Ask</button>
+        <button data-tab="risks">Risk analysis</button>
+        <button data-tab="summary">Summary</button>
+      </div>
+
+      <div data-pane="ask" class="stack">
+        <textarea id="question" placeholder="e.g. Under what conditions can the supplier terminate?"></textarea>
+        <button id="askBtn">Ask</button>
+      </div>
+      <div data-pane="risks" class="stack hidden">
+        <div class="row">
+          <input type="text" id="party" placeholder="Your role in the contract, e.g. Customer">
+          <input type="text" id="focus" placeholder="Optional focus, e.g. termination">
+        </div>
+        <button id="riskBtn">Analyse disadvantages</button>
+      </div>
+      <div data-pane="summary" class="stack hidden">
+        <div class="row"><button id="sumBtn">Generate summary</button><button class="secondary" id="sumForce">Regenerate</button></div>
+        <progress id="sumProgress" class="hidden" value="0" max="1"></progress>
+      </div>
+
+      <div id="output" style="margin-top:14px"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = (path, opts) => fetch('/api' + path, opts);
+let currentDoc = null, pollTimer = null, abortCtl = null, sumTimer = null;
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function errorMessage(res) {
+  try { const body = await res.json(); return body?.error?.message || body?.detail?.[0]?.msg || res.statusText; }
+  catch { return res.statusText; }
+}
+
+// Minimal markdown + citation chips. Text is escaped first.
+function rich(text, validIds) {
+  let html = esc(text)
+    .replace(/^\s*#{2,4}\s*(.+)$/gm, '<h4>$1</h4>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return html.replace(/\[((?:Sources?:?\s*)?S\d{1,3}(?:\s*(?:,|;|&amp;|and)\s*S?\d{1,3})*)\]/gi, (m, inner) =>
+    (inner.match(/\d{1,3}/g) || []).map((n) => {
+      const id = 'S' + Number(n);
+      const bad = validIds && !validIds.has(id);
+      return `<button class="cite${bad ? ' invalid' : ''}" data-sid="${id}" title="${bad ? 'Not a provided source' : 'Show source'}">${id}</button>`;
+    }).join(''));
+}
+
+function sourceCard(s) {
+  return `<details class="source" id="src-${esc(s.source_id)}">
+    <summary><strong>[${esc(s.source_id)}]</strong> ${esc(s.citation)}</summary>
+    <pre>${esc(s.text)}</pre></details>`;
+}
+
+document.addEventListener('click', (e) => {
+  const chip = e.target.closest('.cite');
+  if (!chip) return;
+  const card = document.getElementById('src-' + chip.dataset.sid);
+  if (!card) return;
+  card.open = true; card.scrollIntoView({behavior: 'smooth', block: 'center'});
+  card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1200);
+});
+
+async function streamSSE(path, body, on) {
+  abortCtl?.abort(); abortCtl = new AbortController();
+  const res = await api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body), signal: abortCtl.signal});
+  if (!res.ok) throw new Error(await errorMessage(res));
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const {value, done} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream: true});
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const raw = buf.slice(0, i); buf = buf.slice(i + 2);
+      let ev = 'message', data = '';
+      for (const line of raw.split('\n')) {
+        if (line.startsWith('event:')) ev = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += line.slice(5).trim();
+      }
+      on[ev]?.(data ? JSON.parse(data) : {});
+    }
+  }
+}
+
+// Shared renderer for Q&A and risk analysis streams.
+async function runAnalysis(path, body, btn) {
+  const out = $('output');
+  out.innerHTML = `<div class="answer" id="answer"></div><div id="risks"></div><div class="meta" id="disclaimer"></div><div class="sources" id="sources"></div>`;
+  let text = '', sources = [], valid = new Set();
+  btn.disabled = true;
+  try {
+    await streamSSE(path, body, {
+      sources: (d) => { sources = d.sources; valid = new Set(sources.map((s) => s.source_id)); },
+      token: (d) => { text += d.text; $('answer').innerHTML = rich(text, valid); },
+      citations: (d) => {
+        const cited = d.citations || [];
+        const citedIds = new Set(cited.map((s) => s.source_id));
+        const rest = sources.filter((s) => !citedIds.has(s.source_id));
+        $('sources').innerHTML =
+          (cited.length ? `<h2>Cited sources</h2>${cited.map(sourceCard).join('')}` : '<div class="warn">The answer did not cite any source excerpt. Verify it against the document.</div>') +
+          (rest.length ? `<h2 style="margin-top:14px">Other retrieved excerpts</h2>${rest.map(sourceCard).join('')}` : '');
+        if (d.invalid_source_ids?.length) $('sources').insertAdjacentHTML('afterbegin', `<div class="warn">Ignored citations to non-existent sources: ${esc(d.invalid_source_ids.join(', '))}</div>`);
+      },
+      risks: (d) => {
+        const bySid = Object.fromEntries(sources.map((s) => [s.source_id, s]));
+        $('risks').innerHTML = (d.risks || []).map((r) => `
+          <div class="risk ${esc(r.severity)}">
+            <div class="sev">${esc(r.severity.toUpperCase())}</div>
+            <strong>${esc(r.title)}</strong>
+            <div>${rich(r.analysis, valid)}</div>
+            <div class="meta">${r.citation_missing ? '<span class="warn">No valid source cited: verify manually</span>'
+              : r.source_ids.map((sid) => `<button class="cite" data-sid="${sid}">${sid}</button> ${esc(bySid[sid]?.citation || '')}`).join('<br>')}</div>
+          </div>`).join('');
+        if ((d.risks || []).length) $('answer').classList.add('hidden');
+      },
+      done: (d) => { $('disclaimer').textContent = d.disclaimer; },
+      error: (d) => { out.insertAdjacentHTML('afterbegin', `<div class="warn">${esc(d.message)}</div>`); },
+    });
+  } catch (e) {
+    if (e.name !== 'AbortError') out.insertAdjacentHTML('afterbegin', `<div class="warn">${esc(e.message)}</div>`);
+  } finally { btn.disabled = false; }
+}
+
+$('askBtn').onclick = () => {
+  const q = $('question').value.trim();
+  if (q) runAnalysis(`/documents/${currentDoc}/chat`, {question: q}, $('askBtn'));
+};
+$('riskBtn').onclick = () => runAnalysis(`/documents/${currentDoc}/risk-analysis`,
+  {party: $('party').value.trim() || null, focus: $('focus').value.trim() || null}, $('riskBtn'));
+
+// --- Summary -------------------------------------------------------------
+function renderSummary(job) {
+  const out = $('output'), prog = $('sumProgress');
+  clearTimeout(sumTimer);
+  if (job.status === 'running') {
+    prog.classList.remove('hidden'); prog.max = Math.max(1, job.progress_total); prog.value = job.progress_done;
+    out.innerHTML = `<div class="meta">Summarising… ${job.progress_done}/${job.progress_total || '?'} steps</div>`;
+    sumTimer = setTimeout(pollSummary, 3000);
+    return;
+  }
+  prog.classList.add('hidden');
+  if (job.status === 'failed') { out.innerHTML = `<div class="warn">${esc(job.error?.message)}</div>`; return; }
+  out.innerHTML = `<div class="answer">${rich(job.summary)}</div>
+    <div class="meta" style="margin-top:8px">${esc(job.disclaimer)}</div>
+    <h2 style="margin-top:14px">Section summaries</h2>
+    ${job.section_summaries.map((s) => `<details class="source"><summary>${esc(s.label)} (p. ${s.page_start}${s.page_end !== s.page_start ? '–' + s.page_end : ''})</summary><pre>${esc(s.summary)}</pre></details>`).join('')}`;
+}
+async function pollSummary() {
+  const doc = currentDoc;
+  const res = await api(`/documents/${doc}/summary`);
+  if (doc !== currentDoc) return;
+  if (res.status === 404) { $('output').innerHTML = '<div class="meta">No summary yet.</div>'; return; }
+  if (res.ok) renderSummary(await res.json());
+}
+async function startSummary(force) {
+  const res = await api(`/documents/${currentDoc}/summary`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({force})});
+  if (!res.ok) { $('output').innerHTML = `<div class="warn">${esc(await errorMessage(res))}</div>`; return; }
+  renderSummary(await res.json());
+}
+$('sumBtn').onclick = () => startSummary(false);
+$('sumForce').onclick = () => startSummary(true);
+
+// --- Tabs ------------------------------------------------------------------
+document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
+  document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.tab));
+  abortCtl?.abort(); clearTimeout(sumTimer);
+  $('output').innerHTML = '';
+  if (b.dataset.tab === 'summary') pollSummary();
+});
+
+// --- Documents -------------------------------------------------------------
+async function loadDocs() {
+  const res = await api('/documents');
+  if (!res.ok) return;
+  const docs = await res.json();
+  $('docs').innerHTML = docs.map((d) => `
+    <li data-id="${d.doc_id}" class="${d.doc_id === currentDoc ? 'active' : ''}">
+      <div class="name">${esc(d.filename)}</div>
+      <div class="status ${d.status}">${d.status}${d.status === 'ready' ? ` · ${d.chunk_count} chunks` : ''}${d.error ? ' · ' + esc(d.error.message) : ''}</div>
+    </li>`).join('');
+  $('docs').querySelectorAll('li').forEach((li) => li.onclick = () => selectDoc(li.dataset.id));
+  clearTimeout(pollTimer);
+  if (docs.some((d) => d.status === 'processing')) pollTimer = setTimeout(loadDocs, 3000);
+  if (currentDoc) {
+    const d = docs.find((x) => x.doc_id === currentDoc);
+    if (d) renderDocHeader(d);
+  }
+}
+
+function renderDocHeader(d) {
+  $('docTitle').textContent = d.filename;
+  const r = d.parse_report;
+  $('docMeta').textContent = d.status === 'ready'
+    ? `${r.page_count} pages · parsed with ${r.parser_used} · quality ${(r.quality_score * 100).toFixed(0)}%`
+    : d.status === 'failed' ? `Failed: ${d.error?.message || ''}` : 'Processing (OCR and indexing)…';
+  $('docWarnings').innerHTML = (r?.warnings || []).map((w) => `<div class="warn" style="margin-top:6px">${esc(w)}</div>`).join('');
+  const ready = d.status === 'ready';
+  ['askBtn', 'riskBtn', 'sumBtn', 'sumForce'].forEach((id) => $(id).disabled = !ready);
+}
+
+async function selectDoc(id) {
+  currentDoc = id; abortCtl?.abort(); clearTimeout(sumTimer);
+  $('empty').classList.add('hidden'); $('docView').classList.remove('hidden');
+  $('output').innerHTML = '';
+  document.querySelector('.tabs button[data-tab="ask"]').click();
+  await loadDocs();
+}
+
+$('deleteDoc').onclick = async () => {
+  if (!currentDoc || !confirm('Delete this document and its index?')) return;
+  await api(`/documents/${currentDoc}`, {method: 'DELETE'});
+  currentDoc = null; $('docView').classList.add('hidden'); $('empty').classList.remove('hidden');
+  loadDocs();
+};
+
+$('upload').onsubmit = async (e) => {
+  e.preventDefault();
+  const file = $('file').files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append('file', file);
+  if ($('pdfpw').value) form.append('password', $('pdfpw').value);
+  $('uploadMsg').textContent = 'Uploading…';
+  const res = await api('/documents', {method: 'POST', body: form});
+  if (!res.ok) { $('uploadMsg').textContent = await errorMessage(res); return; }
+  const doc = await res.json();
+  $('uploadMsg').textContent = 'Accepted. Processing…';
+  $('pdfpw').value = ''; $('file').value = '';
+  selectDoc(doc.doc_id);
+};
+
+api('/health').then((r) => r.json()).then((h) => {
+  const llm = h.llm.state === 'ready' ? 'LLM ready' : `LLM ${h.llm.state}${h.llm.error ? ': ' + h.llm.error : ''}`;
+  $('health').textContent = `${llm} · parsers: ${h.parsers_available.join(', ')}`;
+}).catch(() => { $('health').textContent = 'server unreachable'; });
+loadDocs();
+</script>
+</body>
+</html>

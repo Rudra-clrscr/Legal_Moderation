@@ -1,0 +1,5 @@
+# Primary OCR / layout parser (pulls in PyTorch + Surya models, several GB on first run).
+marker-pdf>=1.2
+
+# Optional secondary fallback. Also needs system packages: tesseract and poppler.
+# unstructured[pdf]>=0.16

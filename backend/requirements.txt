@@ -1,0 +1,21 @@
+# Core API
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pydantic>=2.7
+pydantic-settings>=2.3
+
+# Document handling (pypdf text layer + password-protected PDFs; crypto extra = AES support)
+pypdf[crypto]>=5.0
+pillow>=10.4
+
+# Retrieval
+chromadb>=0.5.20
+sentence-transformers>=3.0
+
+# LLM inference. CPU build; for GPU swap in onnxruntime-genai-cuda (NVIDIA)
+# or onnxruntime-genai-directml (any DirectX 12 GPU on Windows).
+onnxruntime-genai>=0.7
+
+# Word (.doc/.docx) conversion through MS Word on Windows. LibreOffice (soffice on PATH) is used when present.
+pywin32>=306; sys_platform == "win32"
