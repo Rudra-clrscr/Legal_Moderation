@@ -7,6 +7,7 @@ validated citations, and produces map-reduce summaries. Everything runs on your 
 ## Layout
 
 ```
+demo.html                    interactive demo page (standalone root preview)
 backend/
   app/
     main.py                  FastAPI app factory + startup warm-up
@@ -24,7 +25,9 @@ backend/
       summarizer.py          map-reduce summaries + background jobs
       ingestion_service.py   upload -> parse -> chunk -> embed pipeline
       document_registry.py   file-backed document metadata
-    static/index.html        reference UI
+    static/
+      index.html             interactive demo & reference UI
+      demo.html              dedicated demo UI endpoint
   tests/
 ```
 
@@ -86,20 +89,40 @@ Then point `LEGAL_LLM_MODEL_PATH` at the output folder. For GPU, install `onnxru
 needs more than 6 GB of VRAM for long contract prompts, so on smaller GPUs keep the LLM on the CPU
 and let Marker use the GPU.
 
-### Run
+### Run on Localhost
+
+#### Option 1: Full AI Backend (FastAPI + OCR + Embeddings + ONNX 7B LLM)
+
+Runs the complete local RAG backend with streaming SSE endpoints, ChromaDB vector store, Marker OCR, and the interactive demo UI:
 
 ```powershell
-python run_server.py --port 8000
+cd backend
+.\.venv\Scripts\activate
+python run_server.py --port 8080
 ```
 
-`run_server.py` starts uvicorn in **Python UTF-8 mode**. Marker's OCR engine (`indra_ocr`) reads its
-UTF-8 model metadata with the locale codec, which fails on Windows (cp1252) without that mode. If
-you start uvicorn yourself, use `python -X utf8 -m uvicorn app.main:app`. Without it, Marker is
-skipped with a clear warning and the parser falls back to the text layer, so scanned documents fail.
+*For Linux/macOS:*
+```bash
+cd backend
+source .venv/bin/activate
+python run_server.py --port 8080
+```
 
-Open http://localhost:8000 for the reference UI. `GET /api/health` shows the model state and which
-parsers are installed. The server starts even without a model; analysis endpoints then return
-`503 MODEL_UNAVAILABLE`.
+Open **http://localhost:8080** or **http://localhost:8080/demo.html** in your browser.
+
+- `run_server.py` starts uvicorn on port **`8080`** by default in **Python UTF-8 mode** (you can specify any custom port using `--port <PORT>`). Marker's OCR engine (`indra_ocr`) reads its UTF-8 model metadata with the locale codec, which fails on Windows (cp1252) without that mode. If you start uvicorn yourself, use `python -X utf8 -m uvicorn app.main:app --port 8080`. Without it, Marker is skipped with a clear warning and the parser falls back to the text layer, so scanned documents fail.
+- `GET /api/health` shows the model state and which parsers are installed. The server starts even without an ONNX model; analysis endpoints then return `503 MODEL_UNAVAILABLE`.
+
+#### Option 2: Instant Standalone Demo (No Model Load Time)
+
+To preview and test the interactive demo page without loading or waiting for the local 7B model (includes preloaded sample contracts, simulated streaming Q&A, risk matrices, and citation popovers):
+
+```powershell
+# From the repository root
+python -m http.server 8080
+```
+
+Open **http://localhost:8080/demo.html** in your browser.
 
 ### Tests
 

@@ -1,0 +1,2787 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BONC Legal Intelligence – Contract Analysis &amp; Risk Review</title>
+<style>
+  :root {
+    --bg-base: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-card: #ffffff;
+    --bg-elevated: #f1f5f9;
+    --border: #e2e8f0;
+    --border-hover: #cbd5e1;
+    --border-focus: #3b82f6;
+    --text-main: #0f172a;
+    --text-muted: #475569;
+    --text-sub: #64748b;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-subtle: #eff6ff;
+    --accent-border: #bfdbfe;
+    
+    /* Category Badges */
+    --cat-nda-bg: #f5f3ff;
+    --cat-nda-text: #7c3aed;
+    --cat-nda-border: #ddd6fe;
+    
+    --cat-msa-bg: #eff6ff;
+    --cat-msa-text: #2563eb;
+    --cat-msa-border: #bfdbfe;
+    
+    --cat-payment-bg: #ecfdf5;
+    --cat-payment-text: #059669;
+    --cat-payment-border: #a7f3d0;
+    
+    --cat-employment-bg: #fdf2f8;
+    --cat-employment-text: #db2777;
+    --cat-employment-border: #fbcfe8;
+    
+    --cat-compliance-bg: #fffbeb;
+    --cat-compliance-text: #d97706;
+    --cat-compliance-border: #fde68a;
+    
+    --cat-other-bg: #f1f5f9;
+    --cat-other-text: #475569;
+    --cat-other-border: #cbd5e1;
+
+    /* Severities */
+    --high: #dc2626;
+    --high-bg: #fef2f2;
+    --high-border: #fecaca;
+    --med: #d97706;
+    --med-bg: #fffbeb;
+    --med-border: #fde68a;
+    --low: #16a34a;
+    --low-bg: #f0fdf4;
+    --low-border: #bbf7d0;
+
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  header {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: #ffffff;
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .brand h1 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .brand .tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .engine-badge-selector {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .engine-select {
+    background: transparent;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
+    outline: none;
+    cursor: pointer;
+  }
+  .server-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #94a3b8;
+  }
+  .dot.online { background: #16a34a; }
+  .dot.offline { background: #dc2626; }
+
+  /* Workspace Partition Switcher */
+  .section-nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    background: var(--bg-base);
+    padding: 4px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+  }
+  .section-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease-in-out;
+  }
+  .section-nav-btn:hover {
+    background: var(--bg-surface);
+  }
+  .section-nav-btn.active {
+    background: var(--bg-surface);
+    border-color: var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .section-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .section-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .section-subtitle {
+    font-size: 10px;
+    color: var(--text-sub);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .section-count {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+  }
+  .section-nav-btn.active .section-count {
+    background: var(--accent-subtle);
+    color: var(--accent);
+  }
+
+  /* Normal Document Badges */
+  .category-badge.research { background: #ecfeff; color: #0891b2; border: 1px solid #a5f3fc; }
+  .category-badge.tech { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .category-badge.guide { background: #fdf4ff; color: #a855f7; border: 1px solid #f5d0fe; }
+  .category-badge.report { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+
+  /* Insight Card for Normal Docs */
+  .insight-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .insight-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .insight-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .insight-tag {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+  }
+  .insight-body {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    flex: 1;
+    height: calc(100vh - 57px);
+    overflow: hidden;
+  }
+  @media (max-width: 900px) {
+    .layout {
+      grid-template-columns: 1fr;
+      height: auto;
+      overflow: visible;
+    }
+  }
+
+  /* Sidebar */
+  aside.sidebar {
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 16px;
+    gap: 20px;
+  }
+
+  .panel-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-sub);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Upload Box */
+  .upload-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .drop-zone {
+    border: 1.5px dashed var(--border-hover);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    text-align: center;
+    cursor: pointer;
+    background: var(--bg-base);
+    transition: all 0.15s;
+  }
+  .drop-zone:hover {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+  }
+  .drop-zone input[type="file"] {
+    display: none;
+  }
+  .drop-zone svg {
+    color: var(--text-sub);
+    margin-bottom: 4px;
+  }
+  .drop-zone-text {
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+  .drop-zone-text strong {
+    color: var(--accent);
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .form-group label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-sub);
+    text-transform: uppercase;
+  }
+  .form-select, .form-input {
+    width: 100%;
+    padding: 7px 10px;
+    font-size: 13px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-main);
+    outline: none;
+  }
+  .form-select:focus, .form-input:focus {
+    border-color: var(--accent);
+  }
+
+  button.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #ffffff;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .btn-secondary {
+    background: var(--bg-surface);
+    border-color: var(--border);
+    color: var(--text-main);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--bg-elevated);
+    border-color: var(--border-hover);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Category Filter Pills */
+  .category-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+  .cat-pill {
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 9px;
+    border-radius: 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .cat-pill:hover {
+    color: var(--text-main);
+    border-color: var(--border-hover);
+  }
+  .cat-pill.active {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+  }
+
+  /* Document List */
+  .doc-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .doc-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .doc-card:hover {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+  }
+  .doc-card.active {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .doc-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .doc-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 230px;
+  }
+  .doc-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* Category Badges */
+  .category-badge {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+  }
+  .category-badge.nda { background: var(--cat-nda-bg); color: var(--cat-nda-text); border-color: var(--cat-nda-border); }
+  .category-badge.msa { background: var(--cat-msa-bg); color: var(--cat-msa-text); border-color: var(--cat-msa-border); }
+  .category-badge.payment { background: var(--cat-payment-bg); color: var(--cat-payment-text); border-color: var(--cat-payment-border); }
+  .category-badge.employment { background: var(--cat-employment-bg); color: var(--cat-employment-text); border-color: var(--cat-employment-border); }
+  .category-badge.compliance { background: var(--cat-compliance-bg); color: var(--cat-compliance-text); border-color: var(--cat-compliance-border); }
+  .category-badge.other { background: var(--cat-other-bg); color: var(--cat-other-text); border-color: var(--cat-other-border); }
+
+  /* Workspace */
+  main.workspace {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-base);
+  }
+  .workspace-header {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .doc-title-group h2 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .doc-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .badge {
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .badge-success {
+    background: var(--low-bg);
+    color: var(--low);
+    border-color: var(--low-border);
+  }
+
+  /* Status Notice Banner */
+  .status-notice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    margin: 14px 24px 0;
+  }
+  .status-notice.processing {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+  }
+  .status-notice.error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+  }
+  .status-notice.ready {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+  }
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 6px;
+    padding: 0 24px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-btn {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 11px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover {
+    color: var(--text-main);
+  }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Pane Content */
+  .tab-pane {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* Question Chips */
+  .chips-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .q-chip {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .q-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-subtle);
+  }
+
+  /* Query Bar */
+  .query-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  textarea.query-field {
+    width: 100%;
+    min-height: 56px;
+    border: none;
+    resize: vertical;
+    outline: none;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: var(--text-main);
+  }
+  textarea.query-field::placeholder {
+    color: var(--text-sub);
+  }
+  .query-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+
+  /* Results Card */
+  .content-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 18px 20px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .answer-body {
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .answer-body strong {
+    color: var(--text-main);
+  }
+  .answer-body h4 {
+    margin: 10px 0 4px;
+    font-size: 14.5px;
+    color: var(--accent);
+  }
+
+  /* Citations Badges */
+  .cite-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    margin: 0 2px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 4px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    cursor: pointer;
+    vertical-align: 1px;
+    transition: all 0.15s ease-in-out;
+  }
+  .cite-tag:hover {
+    background: var(--accent);
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+  }
+  .cite-tag.invalid {
+    background: var(--high-bg);
+    color: var(--high);
+    border-color: var(--high-border);
+    text-decoration: line-through;
+  }
+
+  /* Sources Toolbar & Section */
+  .sources-section {
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+    margin-top: 14px;
+  }
+  .sources-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sources-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sources-toolbar-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text-sub);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+  .sources-count-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .sources-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .filter-pill-group {
+    display: inline-flex;
+    background: var(--bg-elevated);
+    padding: 2px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .filter-pill {
+    padding: 2px 9px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-pill.active {
+    background: #ffffff;
+    color: var(--accent);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+  .toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .toolbar-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-main);
+    border-color: var(--border-hover);
+  }
+
+  /* Beautiful Legal Clause Cards */
+  .sources-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .clause-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    overflow: hidden;
+  }
+  .clause-card.is-cited {
+    border-left: 3.5px solid var(--accent);
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.06);
+  }
+  .clause-card.is-context {
+    border-left: 3.5px solid #94a3b8;
+    opacity: 0.94;
+  }
+  .clause-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-sm);
+  }
+  .clause-card.flash {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35), 0 4px 12px rgba(37, 99, 235, 0.15) !important;
+    transform: translateY(-1px);
+  }
+
+  .clause-header {
+    padding: 9px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    background: var(--bg-elevated);
+    user-select: none;
+    gap: 10px;
+    transition: background 0.15s;
+  }
+  .clause-header:hover {
+    background: #e9eef5;
+  }
+  .clause-header-left {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+  .clause-id-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .clause-id-badge.cited {
+    background: #ecfdf5;
+    color: #065f46;
+    border-color: #a7f3d0;
+  }
+  .clause-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1;
+  }
+  .clause-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .clause-title {
+    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--text-main);
+  }
+  .clause-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .page-pill {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+  }
+  .cited-pill {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+  }
+  .context-pill {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+  }
+  .score-pill {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+  .clause-preview {
+    font-size: 11.5px;
+    color: var(--text-sub);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+  }
+
+  .clause-header-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .clause-action-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 11px;
+    color: var(--text-sub);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    transition: all 0.15s;
+  }
+  .clause-action-btn:hover {
+    background: var(--bg-surface);
+    border-color: var(--border);
+    color: var(--text-main);
+  }
+  .clause-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-sub);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .clause-card.open .clause-chevron {
+    transform: rotate(180deg);
+  }
+
+  .clause-body {
+    display: none;
+    padding: 12px 14px;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    animation: fadeIn 0.15s ease-in;
+  }
+  .clause-card.open .clause-body {
+    display: block;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-3px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .clause-breadcrumb {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .clause-quote {
+    position: relative;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-subtle);
+    padding: 10px 12px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .clause-text {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--text-main);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: inherit;
+  }
+
+  /* Badge status states */
+  .badge.streaming {
+    background: var(--accent-subtle);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    font-weight: 600;
+  }
+  .badge.complete {
+    background: var(--low-bg);
+    color: var(--low);
+    border: 1px solid var(--low-border);
+    font-weight: 600;
+  }
+
+  /* Risk Cards */
+  .risk-card {
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .risk-card.High { border-left-color: var(--high); }
+  .risk-card.Medium { border-left-color: var(--med); }
+  .risk-card.Low { border-left-color: var(--low); }
+  .risk-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .risk-sev {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+  .risk-sev.High { background: var(--high-bg); color: var(--high); border: 1px solid var(--high-border); }
+  .risk-sev.Medium { background: var(--med-bg); color: var(--med); border: 1px solid var(--med-border); }
+  .risk-sev.Low { background: var(--low-bg); color: var(--low); border: 1px solid var(--low-border); }
+
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-sub);
+  }
+  .empty-state h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 6px;
+  }
+
+  .disclaimer-text {
+    font-size: 11.5px;
+    color: var(--text-sub);
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    font-style: italic;
+  }
+
+  progress.summary-progress {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    appearance: none;
+    border: none;
+    overflow: hidden;
+  }
+  progress.summary-progress::-webkit-progress-bar { background: var(--bg-elevated); }
+  progress.summary-progress::-webkit-progress-value { background: var(--accent); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-icon" id="brandIcon">§</div>
+    <h1 id="brandTitle">BONC Legal Intelligence</h1>
+    <span class="tag" id="brandTag">Contract Analysis</span>
+  </div>
+
+  <div class="header-actions">
+    <div class="engine-badge-selector">
+      <span style="font-size:12px; font-weight:600; color:var(--text-sub);">Inference Engine:</span>
+      <select id="engineSelector" class="engine-select" onchange="onEngineChange(this.value)">
+        <option value="auto">⚡ GPU Accelerated (Qwen 2.5 3B)</option>
+        <option value="cpu">💻 CPU Mode (Qwen 2.5 3B / AVX2)</option>
+      </select>
+    </div>
+
+    <div class="server-status">
+      <span class="dot" id="serverDot"></span>
+      <span id="serverStatusText">Checking API Server…</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <!-- Workspace Partition: Legal Contracts vs Normal Documents -->
+    <div class="section-nav">
+      <button class="section-nav-btn active" id="sectionNavLegal" onclick="switchSection('legal')">
+        <span class="section-icon">⚖️</span>
+        <div class="section-meta">
+          <span class="section-title">Legal Contracts</span>
+          <span class="section-subtitle">Clauses &amp; Risk</span>
+        </div>
+        <span class="section-count" id="countSectionLegal">0</span>
+      </button>
+      <button class="section-nav-btn" id="sectionNavNormal" onclick="switchSection('normal')">
+        <span class="section-icon">📄</span>
+        <div class="section-meta">
+          <span class="section-title">Normal Docs</span>
+          <span class="section-subtitle">Insights &amp; Q&amp;A</span>
+        </div>
+        <span class="section-count" id="countSectionNormal">0</span>
+      </button>
+    </div>
+
+    <!-- Upload Section -->
+    <div>
+      <div class="panel-title" id="uploadPanelTitle">Upload Contract</div>
+      <form id="uploadForm" class="upload-card">
+        <label for="filePicker" class="drop-zone">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          <div class="drop-zone-text" id="dropZoneText">Click or drag document here to <strong>Upload</strong></div>
+          <small style="color:var(--text-sub); font-size:11px;">PDF, Word (.doc/.docx), Scanned Images</small>
+        </label>
+        <input type="file" id="filePicker" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.tif,.tiff">
+
+        <div class="form-group">
+          <label for="docCategorySelect" id="docCategoryLabel">Document Category</label>
+          <select id="docCategorySelect" class="form-select">
+            <option value="auto">Auto-detect from document</option>
+            <option value="nda">NDA &amp; Confidentiality</option>
+            <option value="msa">Master Service Agreement (MSA)</option>
+            <option value="payment">Banking &amp; Payment Agreement</option>
+            <option value="employment">Employment &amp; HR Agreement</option>
+            <option value="compliance">Compliance &amp; Policy</option>
+            <option value="other">Other / General Contract</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="pdfPasswordInput">PDF Password (if protected)</label>
+          <input type="password" id="pdfPasswordInput" class="form-input" placeholder="Optional password" autocomplete="off">
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="uploadSubmitBtn">Upload &amp; Index Document</button>
+        <div id="uploadFeedback" style="font-size:11.5px; color:var(--text-muted);"></div>
+      </form>
+    </div>
+
+    <!-- Document Repository Section -->
+    <div style="flex:1; display:flex; flex-direction:column;">
+      <div class="panel-title">
+        <span id="repoPanelTitle">Contracts</span>
+        <button class="btn btn-secondary" style="padding:2px 7px; font-size:11px;" id="refreshDocsBtn">↻ Refresh</button>
+      </div>
+
+      <!-- Category Filter Pills -->
+      <div class="category-filter-bar" id="categoryFilterBar"></div>
+
+      <!-- Document Cards List -->
+      <ul class="doc-list" id="docListContainer"></ul>
+    </div>
+  </aside>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+    <!-- Active Document Workspace Header -->
+    <div class="workspace-header hidden" id="workspaceHeader">
+      <div class="doc-title-group">
+        <h2 id="activeDocTitle">Select a document</h2>
+        <div class="doc-badges">
+          <span class="category-badge other" id="activeDocCatBadge">Category</span>
+          <span class="badge" id="activeDocPages">0 pages</span>
+          <span class="badge badge-success" id="activeDocQuality">Quality: 100%</span>
+          <span class="badge" id="activeDocParser">Parser: Marker</span>
+          <span class="badge" id="activeDocStatus">Ready</span>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-secondary" id="refreshStatusBtn" title="Recheck document status">↻ Status</button>
+        <button class="btn btn-secondary" id="deleteDocBtn" title="Delete document">🗑 Delete</button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tabs hidden" id="workspaceTabs">
+      <button class="tab-btn active" data-tab="chat" id="tabBtnChat">💬 Contract Q&amp;A</button>
+      <button class="tab-btn" data-tab="risks" id="tabBtnRisks">⚠️ Risk Analysis</button>
+      <button class="tab-btn" data-tab="summary" id="tabBtnSummary">📑 Executive Summary</button>
+      <button class="tab-btn" data-tab="chunks" id="tabBtnChunks">🔍 Indexed Chunks</button>
+    </div>
+
+    <!-- Processing / Error Banner -->
+    <div id="docStatusNotice" class="status-notice hidden"></div>
+
+    <!-- Empty Workspace State -->
+    <div class="empty-state" id="emptyWorkspaceState">
+      <h3 id="emptyWorkspaceTitle">No Contract Selected</h3>
+      <p id="emptyWorkspaceText" style="font-size:13px; max-width:480px; margin: 8px auto 0; color:var(--text-sub);">
+        Upload a document using the left sidebar to start asking questions, identifying unfavorable legal clauses, or generating executive summaries.
+      </p>
+    </div>
+
+    <!-- Tab 1: Contract Q&A -->
+    <div class="tab-pane hidden" id="pane-chat">
+      <div>
+        <div style="font-size:11.5px; font-weight:700; color:var(--text-sub); text-transform:uppercase; margin-bottom:6px;" id="suggestedPromptsHeader">
+          Suggested Prompts for this Contract Category:
+        </div>
+        <div class="chips-container" id="promptChipsContainer"></div>
+      </div>
+
+      <div class="query-card">
+        <textarea class="query-field" id="chatQuestionInput" placeholder="Ask any question regarding contract terms, clauses, liabilities, or termination..."></textarea>
+        <div class="query-footer">
+          <div id="llmEngineLabel" style="font-size:11.5px; color:var(--text-sub);">Local RAG Inference via Qwen2.5 &amp; ChromaDB</div>
+          <button class="btn btn-primary" id="askBtn">Ask Assistant</button>
+        </div>
+      </div>
+
+      <div class="content-card" id="chatAnswerCard">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="font-size:14px; font-weight:700;" id="chatAnswerTitle">Legal Analysis &amp; Verified Citations</h3>
+          <span class="badge" id="chatStatusBadge">Ready</span>
+        </div>
+        <div class="answer-body" id="chatAnswerBody">Ask a question above to receive an analysis with verified source citations.</div>
+        <div class="sources-section" id="chatSourcesWrapper">
+          <div class="sources-toolbar">
+            <div class="sources-toolbar-left">
+              <span class="sources-toolbar-title">Cited Clauses &amp; Excerpts</span>
+              <span class="sources-count-badge" id="chatSourcesBadge">0 Clauses</span>
+            </div>
+            <div class="sources-toolbar-right">
+              <div class="filter-pill-group" id="chatFilterGroup">
+                <button type="button" class="filter-pill active" id="chatFilterAll" onclick="setSourcesFilter('chat', 'all')">All (<span id="chatCountAll">0</span>)</button>
+                <button type="button" class="filter-pill" id="chatFilterCited" onclick="setSourcesFilter('chat', 'cited')">Cited (<span id="chatCountCited">0</span>)</button>
+              </div>
+              <button type="button" class="toolbar-btn" onclick="toggleAllCards('chat')" id="chatToggleAllBtn" title="Toggle expand/collapse all clauses">
+                <span class="toggle-icon">↕</span> <span class="toggle-text">Expand All</span>
+              </button>
+            </div>
+          </div>
+          <div class="sources-list" id="chatSourcesList"></div>
+        </div>
+        <div class="disclaimer-text" id="chatDisclaimerText">
+          Automated legal analysis. Excerpts are referenced with [S#] citations. Not formal legal advice.
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Risk Analysis -->
+    <div class="tab-pane hidden" id="pane-risks">
+      <div class="query-card">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label for="riskPartyInput" id="riskPartyLabel">Contracting Party Perspective</label>
+            <input type="text" id="riskPartyInput" class="form-input" placeholder="e.g. Client, Customer, Alliance Partner, Vendor">
+          </div>
+          <div class="form-group">
+            <label for="riskFocusInput" id="riskFocusLabel">Specific Risk Focus (Optional)</label>
+            <input type="text" id="riskFocusInput" class="form-input" placeholder="e.g. termination, advance forfeiture, uncapped indemnity">
+          </div>
+        </div>
+        <div class="query-footer" style="margin-top:6px;">
+          <div id="riskQueryHelper" style="font-size:12px; color:var(--text-sub);">Detects one-sided provisions, uncapped liabilities, and strict compliance covenants.</div>
+          <button class="btn btn-primary" id="analyzeRisksBtn">Run Risk Analysis</button>
+        </div>
+      </div>
+
+      <div class="content-card" id="riskResultCard">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="font-size:14px; font-weight:700;" id="riskResultTitle">Identified Legal Risks</h3>
+          <span class="badge" id="riskCountBadge">0 Risks</span>
+        </div>
+        <div id="riskItemsContainer" style="display:flex; flex-direction:column; gap:10px;">
+          <div style="font-size:13px; color:var(--text-sub);">Click "Run Risk Analysis" to scan the contract excerpts.</div>
+        </div>
+        <div class="sources-section" id="riskSourcesWrapper">
+          <div class="sources-toolbar">
+            <div class="sources-toolbar-left">
+              <span class="sources-toolbar-title">Supporting Contract Clauses</span>
+              <span class="sources-count-badge" id="riskSourcesBadge">0 Clauses</span>
+            </div>
+            <div class="sources-toolbar-right">
+              <div class="filter-pill-group" id="riskFilterGroup">
+                <button type="button" class="filter-pill active" id="riskFilterAll" onclick="setSourcesFilter('risk', 'all')">All (<span id="riskCountAll">0</span>)</button>
+                <button type="button" class="filter-pill" id="riskFilterCited" onclick="setSourcesFilter('risk', 'cited')">Cited (<span id="riskCountCited">0</span>)</button>
+              </div>
+              <button type="button" class="toolbar-btn" onclick="toggleAllCards('risk')" id="riskToggleAllBtn" title="Toggle expand/collapse all clauses">
+                <span class="toggle-icon">↕</span> <span class="toggle-text">Expand All</span>
+              </button>
+            </div>
+          </div>
+          <div class="sources-list" id="riskSourcesList"></div>
+        </div>
+        <div class="disclaimer-text" id="riskDisclaimerText">
+          Risk ratings (High, Medium, Low) are evaluated based on commercial and liability exposure.
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Summary -->
+    <div class="tab-pane hidden" id="pane-summary">
+      <div class="query-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-weight:700; font-size:13.5px;" id="summaryTitle">Map-Reduce Contract Summarization</div>
+            <div style="font-size:12px; color:var(--text-sub);" id="summarySubtitle">Extracts key obligations, payment schedules, liability caps, and termination rules.</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary" id="forceSummaryBtn">Regenerate</button>
+            <button class="btn btn-primary" id="generateSummaryBtn">Generate Summary</button>
+          </div>
+        </div>
+        <progress class="summary-progress hidden" id="summaryProgressBar" value="0" max="1"></progress>
+        <div id="summaryProgressText" style="font-size:11.5px; color:var(--text-muted); display:none;"></div>
+      </div>
+
+      <div class="content-card">
+        <h3 style="font-size:14px; font-weight:700;" id="summaryBriefTitle">Executive Brief</h3>
+        <div class="answer-body" id="summaryBriefText">Click "Generate Summary" to run map-reduce summarization on this document.</div>
+        <div style="margin-top:12px;">
+          <div style="font-size:12px; font-weight:700; color:var(--text-sub); margin-bottom:6px;">SECTION SUMMARIES</div>
+          <div id="sectionSummariesContainer" style="display:flex; flex-direction:column; gap:6px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Indexed Chunks -->
+    <div class="tab-pane hidden" id="pane-chunks">
+      <div class="content-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="font-size:14px; font-weight:700;">Heading-Aware Document Chunks</h3>
+          <span class="badge" id="chunksCountBadge">0 Chunks</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-muted);">
+          Indexed in ChromaDB with section headings, clause numbers, and page references.
+        </div>
+        <div id="chunksListContainer" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+
+// ==========================================================================
+// OFFLINE MOCK DATA & SIMULATION (FOR DEMO MODE WHEN SERVER IS NOT RUNNING)
+// ==========================================================================
+let isOfflineMode = false;
+
+const MOCK_DOCUMENTS = [
+  {
+    doc_id: "doc-legal-1",
+    filename: "API Banking ICICI.pdf",
+    doc_type: "legal",
+    category: "payment",
+    status: "ready",
+    chunk_count: 25,
+    parse_report: { parser_used: "marker", page_count: 11, quality_score: 0.91 }
+  },
+  {
+    doc_id: "doc-legal-2",
+    filename: "Signed Payment Agreement - Costipro Technologies (1).pdf",
+    doc_type: "legal",
+    category: "payment",
+    status: "ready",
+    chunk_count: 35,
+    parse_report: { parser_used: "marker", page_count: 18, quality_score: 0.985 }
+  },
+  {
+    doc_id: "doc-norm-1",
+    filename: "Flood_Forecasting_Manuscript_Inquietud_Empresarial(ver2).docx",
+    doc_type: "normal",
+    category: "research",
+    status: "ready",
+    chunk_count: 56,
+    parse_report: { parser_used: "marker", page_count: 14, quality_score: 0.926 }
+  },
+  {
+    doc_id: "doc-norm-2",
+    filename: "BONC AI Moderation — Integration Approach (Text, Image & Admin Dashboard).pdf",
+    doc_type: "normal",
+    category: "tech",
+    status: "ready",
+    chunk_count: 17,
+    parse_report: { parser_used: "marker", page_count: 7, quality_score: 0.947 }
+  },
+  {
+    doc_id: "doc-norm-3",
+    filename: "BONC Admin Dashboard UI Glossary.pdf",
+    doc_type: "normal",
+    category: "guide",
+    status: "ready",
+    chunk_count: 10,
+    parse_report: { parser_used: "marker", page_count: 7, quality_score: 0.952 }
+  }
+];
+
+const MOCK_RESPONSES = {
+  "doc-legal-1": {
+    chat: {
+      sources: [
+        { source_id: "S1", section_title: "Product Solutions & API Architecture", page_start: 4, page_end: 4, score: 0.94, text: "ICICI Bank provides Host-to-Host (H2H) and Corporate Internet Banking (CIB) API connectivity. The client agrees to implement SSL/TLS 1.3 encryption and adhere to ISO 20022 messaging schemas for transaction execution." },
+        { source_id: "S2", section_title: "Collections & Virtual Accounts", page_start: 5, page_end: 5, score: 0.89, text: "Virtual account based collections enable automated reconciliation across IMPS, NEFT, and RTGS channels. ICICI shall credit settled merchant funds within T+1 banking hours subject to fraud screening." },
+        { source_id: "S3", section_title: "Indemnity & Dispute Claims", page_start: 9, page_end: 9, score: 0.86, text: "The merchant agrees to indemnify and hold harmless ICICI Bank from and against any third-party claims, chargebacks, customer disputes, or regulatory fines arising out of unauthorized access or flawed payload integration." }
+      ],
+      answer: "The agreement governs the deployment and commercial operation of ICICI Bank's API Banking infrastructure.\n\nKey commercial and technical provisions include:\n- **API Connectivity**: As specified in [S1], integration leverages H2H and CIB APIs secured by TLS 1.3 and compliant with ISO 20022 schemas.\n- **Settlement & Virtual Accounts**: According to [S2], merchant collections are processed across IMPS, NEFT, and RTGS with automated virtual account reconciliation and T+1 funds settlement.\n- **Indemnity Obligations**: Per [S3], the merchant maintains full indemnification liability for third-party chargebacks, unauthorized transactions, or regulatory penalties incurred."
+    },
+    risks: [
+      {
+        title: "Broad Third-Party Transaction Indemnity",
+        severity: "High",
+        analysis: "Clause [S3] imposes an uncapped indemnity obligation on the merchant for customer claims, disputes, and regulatory penalties without reciprocal bank protections.",
+        source_ids: ["S3"]
+      },
+      {
+        title: "Discretionary Settlement Hold Without Time Limit",
+        severity: "Medium",
+        analysis: "Clause [S2] conditions T+1 settlement on bank fraud screening without defining objective criteria or maximum suspension timeframes.",
+        source_ids: ["S2"]
+      }
+    ],
+    summary: "Executive Summary: ICICI API Banking Agreement\n\n• Core Subject: Integration of automated banking APIs for disbursements and collections.\n• Key Obligations: Compliance with ISO 20022, security standards, and daily transaction limits.\n• Liability: Uncapped merchant indemnification for transaction claims.\n• Termination: 30 days written notice or immediate termination upon material breach."
+  },
+  "doc-norm-1": {
+    chat: {
+      sources: [],
+      answer: "- **Primary Research Objective**: To establish a standardized benchmark evaluation pipeline across five deep learning hydrological architectures (LSTM, EA-LSTM, Transformer, CNN-LSTM, and Graph-Neural-Networks) applied to continental hydrological datasets.\n\n- **Core Methodology & Metrics**: Models are jointly evaluated across 531 catchment basins using NSE (Nash-Sutcliffe Efficiency), KGE (Kling-Gupta Efficiency), and extreme peak flood quantile accuracy.\n\n- **Key Finding**: Entity-Aware LSTM (EA-LSTM) achieved the highest generalized median NSE of 0.74 across diverse catchment regimes while reducing peak flood timing error by 14% compared to standard physical conceptual baselines.\n\n- **Data Threshold**: Basins with greater than 5% missing streamflow records were strictly excluded to prevent parameter divergence."
+    },
+    risks: [
+      {
+        title: "Strict 5% Missing Record Exclusion Threshold",
+        severity: "Medium",
+        analysis: "The pipeline excludes any basin with >5% missing streamflow data. While ensuring numerical consistency, this introduces a geographical survivorship bias toward well-monitored temperate basins."
+      },
+      {
+        title: "Extreme Peak Event Underestimation",
+        severity: "Low",
+        analysis: "Even top-performing deep architectures (EA-LSTM) exhibited attenuation on 100-year return events when rainfall gauges experienced localized saturation."
+      }
+    ],
+    summary: "Document Summary: Deep Learning for Continental Flood Forecasting\n\n• Objective: Standardized evaluation of five deep learning models on continental basin hydrology.\n• Top Architecture: EA-LSTM demonstrated highest robustness across diverse soil and climate regimes (median NSE 0.74).\n• Quantitative Metrics: Evaluated via NSE, KGE, and peak flood quantile errors across 500+ catchments.\n• Practical Takeaways: Hybrid physical-data models provide optimal balance between data-driven accuracy and physical mass balance guarantees."
+  }
+};
+
+async function simulateStreamSSE(url, payload, callbacks) {
+  const isNorm = url.includes('doc-norm');
+  const mockKey = isNorm ? 'doc-norm-1' : 'doc-legal-1';
+  const data = MOCK_RESPONSES[mockKey] || MOCK_RESPONSES['doc-norm-1'];
+
+  // Check if risk analysis or chat
+  if (url.includes('/risk-analysis')) {
+    if (!isNorm) {
+      callbacks.sources?.({ sources: data.chat.sources });
+    }
+    await new Promise(r => setTimeout(r, activeEngine === 'cpu' ? 1200 : 400));
+    callbacks.risks?.({ risks: data.risks });
+    return;
+  }
+
+  // Chat query
+  if (!isNorm) {
+    callbacks.sources?.({ sources: data.chat.sources });
+  }
+
+  const fullText = data.chat.answer;
+  const words = fullText.split(' ');
+  // Token delay based on active engine: CPU ~18 tok/s (55ms), GPU ~75 tok/s (13ms)
+  const delayMs = (activeEngine === 'cpu') ? 55 : 13;
+
+  for (let i = 0; i < words.length; i++) {
+    const token = (i === 0 ? '' : ' ') + words[i];
+    callbacks.token?.({ text: token });
+    await new Promise(r => setTimeout(r, delayMs));
+  }
+
+  if (!isNorm) {
+    callbacks.citations?.({ citations: [{ source_id: 'S1' }, { source_id: 'S2' }, { source_id: 'S3' }] });
+  }
+  callbacks.done?.({ disclaimer: isNorm ? '' : 'Automated legal analysis. Excerpts are referenced with [S#] citations. Not formal legal advice.' });
+}
+
+/* ==========================================================================
+   BONC INTELLIGENCE - DUAL WORKSPACE (LEGAL CONTRACTS & NORMAL DOCUMENTS)
+   WITH GPU / CPU INFERENCE ENGINE SELECTION
+   ========================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const api = (path, opts) => fetch('/api' + path, opts);
+
+// State
+let activeSection = localStorage.getItem('selected_section') || 'legal';
+let activeEngine = localStorage.getItem('selected_engine') || 'auto';
+let allDocuments = [];
+let activeDocId = null;
+let activeCategoryFilter = 'all';
+let chatAbortCtrl = null;
+let summaryPollTimer = null;
+let docPollTimer = null;
+
+// Category Metadata: Legal Contracts
+const LEGAL_CATEGORIES = {
+  nda: { label: "NDA & Confidentiality", badge: "nda", short: "NDA" },
+  msa: { label: "Master Service Agreement", badge: "msa", short: "MSA" },
+  payment: { label: "Banking & Payment", badge: "payment", short: "Payment" },
+  employment: { label: "Employment & HR", badge: "employment", short: "Employment" },
+  compliance: { label: "Compliance & Policy", badge: "compliance", short: "Compliance" },
+  other: { label: "General Contract", badge: "other", short: "Other" }
+};
+
+// Category Metadata: Normal Documents
+const NORMAL_CATEGORIES = {
+  research: { label: "Research & Academic", badge: "research", short: "Research" },
+  tech: { label: "Technical Specification", badge: "tech", short: "Tech" },
+  guide: { label: "Guide & Standard", badge: "guide", short: "Guide" },
+  report: { label: "Report & Whitepaper", badge: "report", short: "Report" },
+  other: { label: "General Document", badge: "other", short: "General" }
+};
+
+// Prompts by Legal Contract Category
+const PROMPTS_BY_LEGAL_CATEGORY = {
+  nda: [
+    "How long does this agreement remain in force, and what happens to confidential info when it ends?",
+    "What information is excluded from confidentiality obligations?",
+    "What are the remedies or penalties for a breach of confidentiality?"
+  ],
+  msa: [
+    "What are the payment terms and what happens if the Client pays late?",
+    "How is liability limited under this agreement?",
+    "Who owns the intellectual property and foreground deliverables?"
+  ],
+  payment: [
+    "On what grounds can the bank terminate this agreement?",
+    "Who bears the costs of the integration and are there any fees?",
+    "What are the indemnity obligations for transaction claims?",
+    "Summarize the key commercial terms and obligations of this payment agreement"
+  ],
+  employment: [
+    "What are the non-compete and non-solicitation restrictions?",
+    "What is the notice period and severance policy for termination?",
+    "Who retains ownership of inventions created during employment?"
+  ],
+  compliance: [
+    "What data protection and regulatory standards must be maintained?",
+    "What are the audit and reporting rights granted?",
+    "What are the breach notification timelines?"
+  ],
+  other: [
+    "What are the primary termination conditions and notice periods?",
+    "What are the key liability limitations and indemnity clauses?",
+    "What governing law and dispute resolution jurisdiction applies?"
+  ]
+};
+
+// Prompts for Normal Documents
+const PROMPTS_BY_NORMAL_CATEGORY = {
+  research: [
+    "What is the primary research objective and methodology used?",
+    "What are the key numerical findings, metrics, and conclusions?",
+    "What datasets and experimental validation were conducted?",
+    "What are the stated limitations and future research avenues?"
+  ],
+  tech: [
+    "What is the system architecture and integration workflow?",
+    "What APIs, protocols, and data formats are specified?",
+    "What are the security, authentication, and error handling mechanisms?",
+    "Summarize the key implementation requirements and prerequisites."
+  ],
+  guide: [
+    "What are the primary terms, definitions, and components defined?",
+    "What are the step-by-step instructions and user workflows?",
+    "What best practices or administrative guidelines are outlined?"
+  ],
+  report: [
+    "What are the executive takeaways and key findings?",
+    "What quantitative results or market analysis are reported?",
+    "What action items or strategic recommendations are provided?"
+  ],
+  other: [
+    "What is the main topic and core message of this document?",
+    "Summarize the key factual findings and quantitative details.",
+    "What are the actionable takeaways and recommendations?"
+  ]
+};
+
+// Escaping
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[c]));
+
+// Document Classification: Legal Contract vs Normal Document
+function isNormalDocument(doc) {
+  if (doc.doc_type === 'normal') return true;
+  if (doc.doc_type === 'legal') return false;
+  const saved = localStorage.getItem('doctype_' + doc.doc_id);
+  if (saved === 'normal') return true;
+  if (saved === 'legal') return false;
+  const fn = (doc.filename || '').toLowerCase();
+  const normalKeywords = ['manuscript', 'flood', 'glossary', 'moderation', 'approach', 'guide', 'manual', 'spec', 'whitepaper', 'research', 'paper', 'thesis', 'tutorial', 'handbook', 'report'];
+  if (normalKeywords.some(k => fn.includes(k))) return true;
+  if (fn.endsWith('.docx') || fn.endsWith('.doc')) return true;
+  return false;
+}
+
+// Category extraction for active document
+function getDocumentCategory(doc) {
+  const isNorm = isNormalDocument(doc);
+  const catMap = isNorm ? NORMAL_CATEGORIES : LEGAL_CATEGORIES;
+  const saved = localStorage.getItem('cat_' + doc.doc_id);
+  if (saved && catMap[saved]) return saved;
+
+  const fn = (doc.filename || '').toLowerCase();
+  if (isNorm) {
+    if (fn.includes('manuscript') || fn.includes('flood') || fn.includes('paper') || fn.includes('research') || fn.includes('thesis')) return 'research';
+    if (fn.includes('moderation') || fn.includes('integration') || fn.includes('approach') || fn.includes('architecture') || fn.includes('api') || fn.includes('tech')) return 'tech';
+    if (fn.includes('glossary') || fn.includes('guide') || fn.includes('manual') || fn.includes('standard')) return 'guide';
+    if (fn.includes('report') || fn.includes('whitepaper') || fn.includes('overview')) return 'report';
+    return 'other';
+  } else {
+    if (fn.includes('nda') || fn.includes('confidential') || fn.includes('non-disclosure')) return 'nda';
+    if (fn.includes('msa') || fn.includes('master service') || fn.includes('sow') || fn.includes('service agreement')) return 'msa';
+    if (fn.includes('payment') || fn.includes('bank') || fn.includes('h2h') || fn.includes('icici') || fn.includes('billing')) return 'payment';
+    if (fn.includes('employ') || fn.includes('offer') || fn.includes('contractor') || fn.includes('consultant')) return 'employment';
+    if (fn.includes('compliance') || fn.includes('policy') || fn.includes('gdpr') || fn.includes('privacy')) return 'compliance';
+    return 'other';
+  }
+}
+
+// Rich Text Formatter: Strips [S#] citations for Normal Docs (Clauses not needed)
+function formatRichText(text, validIds, isNormalDoc = false) {
+  let cleanText = text || '';
+  if (isNormalDoc) {
+    // Normal documents: strip all citation tags completely for clean, distraction-free reading
+    cleanText = cleanText.replace(/\[(?:Sources?:?\s*)?S\d{1,3}(?:\s*(?:,|;|&amp;|and)\s*S?\d{1,3})*\]/gi, '');
+  }
+
+  let html = esc(cleanText)
+    .replace(/^\s*#{2,4}\s*(.+)$/gm, '<h4>$1</h4>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^\s*-\s+(.+)$/gm, '• $1');
+
+  if (isNormalDoc) {
+    return html;
+  }
+
+  // Legal contracts: render interactive [S#] citation chips
+  return html.replace(/\[((?:Sources?:?\s*)?S\d{1,3}(?:\s*(?:,|;|&amp;|and)\s*S?\d{1,3})*)\]/gi, (match, inner) => {
+    const nums = inner.match(/\d{1,3}/g) || [];
+    return nums.map((n) => {
+      const id = 'S' + Number(n);
+      const invalid = validIds && !validIds.has(id);
+      return `<button class="cite-tag${invalid ? ' invalid' : ''}" data-sid="${id}" title="${invalid ? 'Unverified Excerpt' : 'View Clause'}">${id}</button>`;
+    }).join('');
+  });
+}
+
+// Engine Change Handler
+function onEngineChange(val) {
+  activeEngine = val;
+  localStorage.setItem('selected_engine', val);
+  api('/engine', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ engine: val })
+  }).catch(() => {});
+  updateEngineUI();
+}
+
+function updateEngineUI() {
+  const sel = $('engineSelector');
+  if (sel) sel.value = activeEngine;
+  const isCpu = (activeEngine === 'cpu');
+  const engineEl = $('llmEngineLabel');
+  if (engineEl) {
+    engineEl.textContent = isCpu
+      ? 'Local Inference via Qwen 2.5 3B (💻 CPU Mode / AVX2) & ChromaDB'
+      : 'Local Inference via Qwen 2.5 3B (⚡ GPU Accelerated) & ChromaDB';
+  }
+}
+
+// Section Switching: Legal Contracts vs Normal Documents
+function switchSection(section) {
+  activeSection = section;
+  localStorage.setItem('selected_section', section);
+  activeCategoryFilter = 'all';
+
+  // Toggle active button states
+  $('sectionNavLegal').classList.toggle('active', section === 'legal');
+  $('sectionNavNormal').classList.toggle('active', section === 'normal');
+
+  const isNorm = (section === 'normal');
+
+  // Brand Header
+  $('brandTitle').textContent = isNorm ? 'BONC Document Intelligence' : 'BONC Legal Intelligence';
+  $('brandTag').textContent = isNorm ? 'General Document Analysis & Q&A' : 'Contract Analysis';
+  $('brandIcon').textContent = isNorm ? '📄' : '§';
+
+  // Sidebar Titles
+  $('uploadPanelTitle').textContent = isNorm ? 'Upload Document' : 'Upload Contract';
+  $('dropZoneText').innerHTML = isNorm
+    ? 'Click or drag document here to <strong>Upload</strong>'
+    : 'Click or drag contract here to <strong>Upload</strong>';
+  $('repoPanelTitle').textContent = isNorm ? 'Documents' : 'Contracts';
+
+  // Workspace Empty State
+  $('emptyWorkspaceTitle').textContent = isNorm ? 'No Document Selected' : 'No Contract Selected';
+  $('emptyWorkspaceText').textContent = isNorm
+    ? 'Upload a document (PDF, Word, report, research paper) to extract key takeaways, analyze data, and ask factual questions.'
+    : 'Upload a contract using the left sidebar to start asking questions, identifying unfavorable legal clauses, or generating executive summaries.';
+
+  // Tabs
+  $('tabBtnChat').innerHTML = isNorm ? '💬 Document Q&amp;A' : '💬 Contract Q&amp;A';
+  $('tabBtnRisks').innerHTML = isNorm ? '💡 Key Takeaways' : '⚠️ Risk Analysis';
+  $('tabBtnSummary').innerHTML = isNorm ? '📑 Document Summary' : '📑 Executive Summary';
+
+  renderUploadCategoryOptions();
+  renderCategoryPills();
+  renderDocumentList();
+  updateSectionCounts();
+
+  // If the active document does not match the active section, switch to an appropriate one
+  const currentDoc = allDocuments.find(d => d.doc_id === activeDocId);
+  if (currentDoc && isNormalDocument(currentDoc) !== isNorm) {
+    const matchingDocs = allDocuments.filter(d => isNormalDocument(d) === isNorm);
+    if (matchingDocs.length > 0) {
+      selectDocument(matchingDocs[0].doc_id);
+    } else {
+      deselectDocument();
+    }
+  }
+}
+
+function renderUploadCategoryOptions() {
+  const isNorm = (activeSection === 'normal');
+  const catMap = isNorm ? NORMAL_CATEGORIES : LEGAL_CATEGORIES;
+  const sel = $('docCategorySelect');
+  sel.innerHTML = `<option value="auto">Auto-detect from document</option>` +
+    Object.entries(catMap).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join('');
+}
+
+function renderCategoryPills() {
+  const isNorm = (activeSection === 'normal');
+  const catMap = isNorm ? NORMAL_CATEGORIES : LEGAL_CATEGORIES;
+  const bar = $('categoryFilterBar');
+  let html = `<button type="button" class="cat-pill ${activeCategoryFilter === 'all' ? 'active' : ''}" data-cat="all">All (<span id="count-all">0</span>)</button>`;
+  for (const [k, v] of Object.entries(catMap)) {
+    html += `<button type="button" class="cat-pill ${activeCategoryFilter === k ? 'active' : ''}" data-cat="${k}">${v.short} (<span id="count-${k}">0</span>)</button>`;
+  }
+  bar.innerHTML = html;
+  bar.querySelectorAll('.cat-pill').forEach(pill => {
+    pill.onclick = () => {
+      bar.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeCategoryFilter = pill.dataset.cat;
+      renderDocumentList();
+    };
+  });
+}
+
+function updateSectionCounts() {
+  let legalCount = 0;
+  let normalCount = 0;
+  allDocuments.forEach(d => {
+    if (isNormalDocument(d)) normalCount++;
+    else legalCount++;
+  });
+
+  const countLegalEl = $('countSectionLegal');
+  const countNormalEl = $('countSectionNormal');
+  if (countLegalEl) countLegalEl.textContent = legalCount;
+  if (countNormalEl) countNormalEl.textContent = normalCount;
+
+  const isNorm = (activeSection === 'normal');
+  const catMap = isNorm ? NORMAL_CATEGORIES : LEGAL_CATEGORIES;
+  const counts = { all: isNorm ? normalCount : legalCount };
+  Object.keys(catMap).forEach(k => counts[k] = 0);
+
+  allDocuments.filter(d => isNormalDocument(d) === isNorm).forEach(d => {
+    const cat = getDocumentCategory(d);
+    if (counts[cat] !== undefined) counts[cat]++;
+  });
+
+  for (const [k, v] of Object.entries(counts)) {
+    const el = $('count-' + k);
+    if (el) el.textContent = v;
+  }
+}
+
+// Render Document List based on active section and category filter
+function renderDocumentList() {
+  const container = $('docListContainer');
+  const isNorm = (activeSection === 'normal');
+  const catMap = isNorm ? NORMAL_CATEGORIES : LEGAL_CATEGORIES;
+
+  let docs = allDocuments.filter(d => isNormalDocument(d) === isNorm);
+  if (activeCategoryFilter !== 'all') {
+    docs = docs.filter(d => getDocumentCategory(d) === activeCategoryFilter);
+  }
+
+  if (docs.length === 0) {
+    const noun = isNorm ? 'documents' : 'contracts';
+    container.innerHTML = `
+      <li style="padding:16px 12px; font-size:12.5px; color:var(--text-sub); text-align:center;">
+        No ${noun} in this category.<br>Upload a file using the form above.
+      </li>`;
+    return;
+  }
+
+  container.innerHTML = docs.map(d => {
+    const cat = getDocumentCategory(d);
+    const catMeta = catMap[cat] || catMap.other;
+    const isAct = d.doc_id === activeDocId;
+    const isProc = d.status === 'processing';
+    return `
+      <li class="doc-card ${isAct ? 'active' : ''}" data-id="${esc(d.doc_id)}">
+        <div class="doc-card-header">
+          <span class="doc-card-title" title="${esc(d.filename)}">${esc(d.filename)}</span>
+          <span class="category-badge ${catMeta.badge}">${catMeta.short}</span>
+        </div>
+        <div class="doc-card-meta">
+          <span>${isProc ? '<span class="spinner" style="width:9px;height:9px;vertical-align:middle;margin-right:2px;"></span> processing' : d.status}</span>
+          <span>·</span>
+          <span>${d.chunk_count || 0} chunks</span>
+          <span>·</span>
+          <span>${d.parse_report?.page_count || 1} pgs</span>
+        </div>
+      </li>`;
+  }).join('');
+
+  container.querySelectorAll('.doc-card').forEach(item => {
+    item.onclick = () => selectDocument(item.dataset.id);
+  });
+}
+
+// Sources State for Chat & Risk Analysis (Legal Documents Only)
+const chatSourcesState = {
+  sources: [],
+  validIds: new Set(),
+  citedIds: new Set(),
+  filter: 'all',
+  allOpen: false
+};
+
+const riskSourcesState = {
+  sources: [],
+  validIds: new Set(),
+  citedIds: new Set(),
+  filter: 'all',
+  allOpen: false
+};
+
+function renderSourceCard(s, isCited = false) {
+  const sid = esc(s.source_id);
+  const pageStr = s.page_start ? (s.page_start === s.page_end ? `p. ${s.page_start}` : `pp. ${s.page_start}–${s.page_end}`) : '';
+  const rawTitle = s.section_title || s.section_label || 'Contract Excerpt';
+  const cleanTitle = esc(rawTitle);
+  const preview = esc((s.text || '').replace(/\s+/g, ' ').trim().slice(0, 130));
+  const scorePercent = s.score != null ? Math.round(s.score * 100) : null;
+  const breadcrumb = Array.isArray(s.header_path) && s.header_path.length > 1 ? esc(s.header_path.join(' › ')) : '';
+
+  return `
+  <div class="clause-card ${isCited ? 'is-cited' : 'is-context'}" id="src-${sid}" data-sid="${sid}">
+    <div class="clause-header" onclick="toggleClauseCard('${sid}')">
+      <div class="clause-header-left">
+        <span class="clause-id-badge ${isCited ? 'cited' : ''}">[${sid}]</span>
+        <div class="clause-meta">
+          <div class="clause-title-row">
+            <span class="clause-title" title="${cleanTitle}">${cleanTitle}</span>
+            ${pageStr ? `<span class="clause-pill page-pill"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg> ${pageStr}</span>` : ''}
+            ${isCited ? `<span class="clause-pill cited-pill"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> Cited Clause</span>` : `<span class="clause-pill context-pill">Reference Context</span>`}
+            ${scorePercent ? `<span class="clause-pill score-pill" title="Retrieval match score">${scorePercent}% Match</span>` : ''}
+          </div>
+          <div class="clause-preview">${preview}${preview.length >= 130 ? '…' : ''}</div>
+        </div>
+      </div>
+      <div class="clause-header-right">
+        <button type="button" class="clause-action-btn" onclick="copyClauseText(event, '${sid}')" title="Copy clause excerpt">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span class="copy-label">Copy</span>
+        </button>
+        <span class="clause-chevron">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </span>
+      </div>
+    </div>
+    <div class="clause-body" id="body-${sid}">
+      ${breadcrumb ? `<div class="clause-breadcrumb"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg> ${breadcrumb}</div>` : ''}
+      <div class="clause-quote">
+        <div class="clause-text" id="text-${sid}">${esc(s.text)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function updateSourcesUI(scope) {
+  const state = scope === 'chat' ? chatSourcesState : riskSourcesState;
+  const container = $(scope === 'chat' ? 'chatSourcesList' : 'riskSourcesList');
+  const badge = $(scope === 'chat' ? 'chatSourcesBadge' : 'riskSourcesBadge');
+  const countAll = $(scope === 'chat' ? 'chatCountAll' : 'riskCountAll');
+  const countCited = $(scope === 'chat' ? 'chatCountCited' : 'riskCountCited');
+
+  const total = state.sources.length;
+  const citedCount = state.sources.filter(s => state.citedIds.has(s.source_id)).length;
+
+  if (countAll) countAll.textContent = total;
+  if (countCited) countCited.textContent = citedCount;
+  if (badge) {
+    badge.textContent = citedCount > 0 ? `${citedCount} Cited • ${total} Total` : `${total} Clause${total === 1 ? '' : 's'}`;
+  }
+
+  const filtered = state.filter === 'cited'
+    ? state.sources.filter(s => state.citedIds.has(s.source_id))
+    : state.sources;
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div style="font-size:12px; color:var(--text-sub); padding:10px 0;">No clauses match the current filter.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(s => renderSourceCard(s, state.citedIds.has(s.source_id))).join('');
+}
+
+function toggleClauseCard(sid) {
+  const card = document.getElementById('src-' + sid);
+  if (card) {
+    card.classList.toggle('open');
+  }
+}
+
+function toggleAllCards(scope) {
+  const state = scope === 'chat' ? chatSourcesState : riskSourcesState;
+  state.allOpen = !state.allOpen;
+  const btn = $(scope === 'chat' ? 'chatToggleAllBtn' : 'riskToggleAllBtn');
+  if (btn) {
+    const textSpan = btn.querySelector('.toggle-text');
+    if (textSpan) textSpan.textContent = state.allOpen ? 'Collapse All' : 'Expand All';
+  }
+  const container = $(scope === 'chat' ? 'chatSourcesList' : 'riskSourcesList');
+  const cards = container.querySelectorAll('.clause-card');
+  cards.forEach(c => {
+    if (state.allOpen) c.classList.add('open');
+    else c.classList.remove('open');
+  });
+}
+
+function setSourcesFilter(scope, filter) {
+  const state = scope === 'chat' ? chatSourcesState : riskSourcesState;
+  state.filter = filter;
+  const btnAll = $(scope === 'chat' ? 'chatFilterAll' : 'riskFilterAll');
+  const btnCited = $(scope === 'chat' ? 'chatFilterCited' : 'riskFilterCited');
+  if (btnAll && btnCited) {
+    if (filter === 'all') {
+      btnAll.classList.add('active');
+      btnCited.classList.remove('active');
+    } else {
+      btnAll.classList.remove('active');
+      btnCited.classList.add('active');
+    }
+  }
+  updateSourcesUI(scope);
+}
+
+function copyClauseText(event, sid) {
+  event.stopPropagation();
+  const textEl = document.getElementById('text-' + sid);
+  if (!textEl) return;
+  const text = textEl.textContent || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.currentTarget;
+    const label = btn.querySelector('.copy-label');
+    if (label) {
+      const orig = label.textContent;
+      label.textContent = 'Copied!';
+      btn.style.color = 'var(--low)';
+      setTimeout(() => {
+        label.textContent = orig;
+        btn.style.color = '';
+      }, 1500);
+    }
+  });
+}
+
+// Delegation for citation chip clicks (Legal Mode Only)
+document.addEventListener('click', (e) => {
+  const chip = e.target.closest('.cite-tag');
+  if (!chip) return;
+  const sid = chip.dataset.sid;
+  let card = document.getElementById('src-' + sid);
+
+  if (!card) {
+    if (chatSourcesState.sources.some(s => s.source_id === sid)) {
+      setSourcesFilter('chat', 'all');
+      card = document.getElementById('src-' + sid);
+    } else if (riskSourcesState.sources.some(s => s.source_id === sid)) {
+      setSourcesFilter('risk', 'all');
+      card = document.getElementById('src-' + sid);
+    }
+  }
+
+  if (card) {
+    card.classList.add('open');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    card.classList.remove('flash');
+    void card.offsetWidth;
+    card.classList.add('flash');
+    setTimeout(() => card.classList.remove('flash'), 1800);
+  }
+});
+
+// Check Server Health (with Offline Demo Fallback)
+async function checkHealth() {
+  const dot = $('serverDot');
+  const text = $('serverStatusText');
+  try {
+    const res = await api('/health');
+    if (res.ok) {
+      const h = await res.json();
+      dot.className = 'dot online';
+      const providerLabel = h.llm?.provider === 'ollama'
+        ? `Ollama (${h.llm?.model_path || 'Qwen2.5 3B'})`
+        : (h.llm?.provider === 'onnx' ? 'DirectML GPU' : (h.llm?.state || 'ready'));
+      text.textContent = `Online (${providerLabel})`;
+      isOfflineMode = false;
+      updateEngineUI();
+      return;
+    }
+  } catch (e) {}
+  // Offline Demo Simulation Mode
+  isOfflineMode = true;
+  dot.className = 'dot online';
+  dot.style.backgroundColor = 'var(--accent)';
+  text.textContent = 'Demo Mode (Local Simulation)';
+  updateEngineUI();
+}
+
+// Load Documents from Backend with Auto-Polling
+async function loadDocuments() {
+  try {
+    if (isOfflineMode) {
+      allDocuments = [...MOCK_DOCUMENTS];
+      renderDocumentList();
+      updateSectionCounts();
+      const isNorm = (activeSection === 'normal');
+      const matching = allDocuments.filter(d => isNormalDocument(d) === isNorm);
+      if (matching.length > 0) selectDocument(matching[0].doc_id);
+      return;
+    }
+    const res = await api('/documents');
+    if (!res.ok) {
+      isOfflineMode = true;
+      allDocuments = [...MOCK_DOCUMENTS];
+      renderDocumentList();
+      updateSectionCounts();
+      const isNorm = (activeSection === 'normal');
+      const matching = allDocuments.filter(d => isNormalDocument(d) === isNorm);
+      if (matching.length > 0) selectDocument(matching[0].doc_id);
+      return;
+    }
+    allDocuments = await res.json();
+    renderDocumentList();
+    updateSectionCounts();
+
+    const isNorm = (activeSection === 'normal');
+    if (activeDocId) {
+      const current = allDocuments.find(d => d.doc_id === activeDocId);
+      if (current && isNormalDocument(current) === isNorm) {
+        updateActiveDocView(current);
+      } else {
+        const matching = allDocuments.filter(d => isNormalDocument(d) === isNorm);
+        if (matching.length > 0) selectDocument(matching[0].doc_id);
+        else deselectDocument();
+      }
+    } else {
+      const matching = allDocuments.filter(d => isNormalDocument(d) === isNorm);
+      if (matching.length > 0) {
+        selectDocument(matching[0].doc_id);
+      }
+    }
+
+    // Auto-poll while any document is in 'processing' status
+    clearTimeout(docPollTimer);
+    if (allDocuments.some(d => d.status === 'processing')) {
+      docPollTimer = setTimeout(loadDocuments, 2000);
+    }
+  } catch (err) {
+    console.error("Failed to load documents", err);
+  }
+}
+
+// Update Workspace View based on active document type (Legal vs Normal)
+function updateActiveDocView(doc) {
+  const isReady = (doc.status === 'ready');
+  const isProc = (doc.status === 'processing');
+  const isFail = (doc.status === 'failed');
+  const isNorm = isNormalDocument(doc);
+  const catMap = isNorm ? NORMAL_CATEGORIES : LEGAL_CATEGORIES;
+
+  $('activeDocTitle').textContent = doc.filename;
+  const cat = getDocumentCategory(doc);
+  const catMeta = catMap[cat] || catMap.other;
+  const catBadge = $('activeDocCatBadge');
+  catBadge.className = `category-badge ${catMeta.badge}`;
+  catBadge.textContent = catMeta.label;
+
+  $('activeDocPages').textContent = `${doc.parse_report?.page_count || (isReady ? 1 : '?')} pages`;
+  $('activeDocQuality').textContent = doc.parse_report ? `Quality: ${((doc.parse_report.quality_score || 0) * 100).toFixed(0)}%` : 'Quality: Pending';
+  $('activeDocParser').textContent = `Parser: ${doc.parse_report?.parser_used || (isProc ? 'OCR running…' : 'None')}`;
+
+  const statusEl = $('activeDocStatus');
+  if (isReady) {
+    statusEl.className = 'badge badge-success';
+    statusEl.textContent = '✓ Ready';
+  } else if (isProc) {
+    statusEl.className = 'badge';
+    statusEl.style.backgroundColor = 'var(--med-bg)';
+    statusEl.style.color = 'var(--med)';
+    statusEl.style.borderColor = 'var(--med-border)';
+    statusEl.innerHTML = '<span class="spinner" style="width:9px;height:9px;vertical-align:middle;margin-right:4px;"></span> Processing';
+  } else {
+    statusEl.className = 'badge';
+    statusEl.style.backgroundColor = 'var(--high-bg)';
+    statusEl.style.color = 'var(--high)';
+    statusEl.style.borderColor = 'var(--high-border)';
+    statusEl.textContent = 'Failed';
+  }
+
+  // Disable / Enable analysis controls
+  $('askBtn').disabled = !isReady;
+  $('chatQuestionInput').disabled = !isReady;
+  $('analyzeRisksBtn').disabled = !isReady;
+  $('generateSummaryBtn').disabled = !isReady;
+  $('forceSummaryBtn').disabled = !isReady;
+
+  // Processing Notice Banner
+  const notice = $('docStatusNotice');
+  if (isProc) {
+    notice.className = 'status-notice processing';
+    notice.innerHTML = `
+      <span class="spinner"></span>
+      <div>
+        <strong>Document is currently being processed</strong>
+        <div>Running Marker OCR extraction, document chunking, and ChromaDB vector indexing. This page updates automatically when ready (typically 10–25s).</div>
+      </div>`;
+    notice.classList.remove('hidden');
+  } else if (isFail) {
+    notice.className = 'status-notice error';
+    notice.innerHTML = `
+      <div>
+        <strong>Document Processing Failed:</strong> ${esc(doc.error?.message || 'Could not parse or OCR this document.')}
+      </div>`;
+    notice.classList.remove('hidden');
+  } else {
+    notice.classList.add('hidden');
+  }
+
+  // Highlight list item
+  document.querySelectorAll('.doc-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.id === doc.doc_id);
+  });
+
+  // Adapt Workspace Content for Normal Docs vs Legal Contracts
+  const chatSourcesWrapper = $('chatSourcesWrapper');
+  const chatDisclaimer = $('chatDisclaimerText');
+  const riskSourcesWrapper = $('riskSourcesWrapper');
+  const riskDisclaimer = $('riskDisclaimerText');
+
+  if (isNorm) {
+    // NORMAL DOCUMENTS: "clauses will not be needed"
+    if (chatSourcesWrapper) chatSourcesWrapper.style.display = 'none';
+    if (chatDisclaimer) chatDisclaimer.style.display = 'none';
+    if (riskSourcesWrapper) riskSourcesWrapper.style.display = 'none';
+    if (riskDisclaimer) riskDisclaimer.style.display = 'none';
+
+    $('chatAnswerTitle').textContent = 'Document Analysis & Factual Findings';
+    $('chatQuestionInput').placeholder = 'Ask any question regarding methodology, findings, data, or practical conclusions...';
+    $('suggestedPromptsHeader').textContent = 'Suggested Prompts for this Document:';
+
+    $('riskResultTitle').textContent = 'Key Findings & Practical Takeaways';
+    $('riskPartyLabel').textContent = 'Analysis Perspective (Optional)';
+    $('riskPartyInput').placeholder = 'e.g. Executive, Engineering, Research, Operations';
+    $('riskFocusLabel').textContent = 'Specific Focus (Optional)';
+    $('riskFocusInput').placeholder = 'e.g. Methodology, Numerical Findings, Limitations, Next Steps';
+    $('riskQueryHelper').textContent = 'Extracts core methodology, quantitative data, and practical takeaways without legal liability ratings.';
+    $('analyzeRisksBtn').textContent = 'Extract Key Takeaways';
+
+    $('summaryTitle').textContent = 'Document Summarization';
+    $('summarySubtitle').textContent = 'Extracts main objectives, methodology, key findings, and practical takeaways.';
+    $('summaryBriefTitle').textContent = 'Executive Summary';
+  } else {
+    // LEGAL CONTRACTS: Full legal clause intelligence suite
+    if (chatSourcesWrapper) chatSourcesWrapper.style.display = 'block';
+    if (chatDisclaimer) chatDisclaimer.style.display = 'block';
+    if (riskSourcesWrapper) riskSourcesWrapper.style.display = 'block';
+    if (riskDisclaimer) riskDisclaimer.style.display = 'block';
+
+    $('chatAnswerTitle').textContent = 'Legal Analysis & Verified Citations';
+    $('chatQuestionInput').placeholder = 'Ask any question regarding contract terms, clauses, liabilities, or termination...';
+    $('suggestedPromptsHeader').textContent = 'Suggested Prompts for this Contract Category:';
+
+    $('riskResultTitle').textContent = 'Identified Legal Risks';
+    $('riskPartyLabel').textContent = 'Contracting Party Perspective';
+    $('riskPartyInput').placeholder = 'e.g. Client, Customer, Alliance Partner, Vendor';
+    $('riskFocusLabel').textContent = 'Specific Risk Focus (Optional)';
+    $('riskFocusInput').placeholder = 'e.g. termination, advance forfeiture, uncapped indemnity';
+    $('riskQueryHelper').textContent = 'Detects one-sided provisions, uncapped liabilities, and strict compliance covenants.';
+    $('analyzeRisksBtn').textContent = 'Run Risk Analysis';
+
+    $('summaryTitle').textContent = 'Map-Reduce Contract Summarization';
+    $('summarySubtitle').textContent = 'Extracts key obligations, payment schedules, liability caps, and termination rules.';
+    $('summaryBriefTitle').textContent = 'Executive Brief';
+  }
+}
+
+// Select a document
+async function selectDocument(docId) {
+  const isDifferentDoc = (activeDocId !== docId);
+  activeDocId = docId;
+  const doc = allDocuments.find(d => d.doc_id === docId);
+  if (!doc) return;
+
+  $('emptyWorkspaceState').classList.add('hidden');
+  $('workspaceHeader').classList.remove('hidden');
+  $('workspaceTabs').classList.remove('hidden');
+
+  updateActiveDocView(doc);
+
+  if (isDifferentDoc) {
+    const isNorm = isNormalDocument(doc);
+    const cat = getDocumentCategory(doc);
+
+    // Render suggested question chips
+    const chipPromptMap = isNorm ? PROMPTS_BY_NORMAL_CATEGORY : PROMPTS_BY_LEGAL_CATEGORY;
+    const chips = chipPromptMap[cat] || chipPromptMap.other;
+    const chipContainer = $('promptChipsContainer');
+    chipContainer.innerHTML = chips.map(q => `
+      <button class="q-chip">${esc(q)}</button>
+    `).join('');
+    chipContainer.querySelectorAll('.q-chip').forEach(btn => {
+      btn.onclick = () => {
+        $('chatQuestionInput').value = btn.textContent;
+        $('askBtn').click();
+      };
+    });
+
+    // Reset Chat pane
+    $('chatAnswerBody').innerHTML = isNorm
+      ? 'Ask a factual question above to receive a clear, direct answer with key findings.'
+      : 'Ask a question above to receive an analysis with verified source citations.';
+    $('chatStatusBadge').textContent = 'Ready';
+    $('chatStatusBadge').className = 'badge';
+    chatSourcesState.sources = [];
+    chatSourcesState.validIds = new Set();
+    chatSourcesState.citedIds = new Set();
+    chatSourcesState.filter = 'all';
+    setSourcesFilter('chat', 'all');
+    if (!isNorm) updateSourcesUI('chat');
+
+    // Reset Risk / Takeaways pane
+    $('riskItemsContainer').innerHTML = isNorm
+      ? '<div style="font-size:13px; color:var(--text-sub);">Click "Extract Key Takeaways" to scan document sections.</div>'
+      : '<div style="font-size:13px; color:var(--text-sub);">Click "Run Risk Analysis" to scan the contract excerpts.</div>';
+    $('riskCountBadge').textContent = isNorm ? '0 Insights' : '0 Risks';
+    riskSourcesState.sources = [];
+    riskSourcesState.validIds = new Set();
+    riskSourcesState.citedIds = new Set();
+    riskSourcesState.filter = 'all';
+    setSourcesFilter('risk', 'all');
+    if (!isNorm) updateSourcesUI('risk');
+
+    // Reset Summary pane
+    $('summaryBriefText').innerHTML = 'Click "Generate Summary" to run map-reduce summarization on this document.';
+    $('sectionSummariesContainer').innerHTML = '';
+
+    // Load Chunks if ready
+    if (doc.status === 'ready') {
+      loadDocumentChunks(docId);
+    }
+
+    // Default to Chat tab
+    document.querySelector('.tab-btn[data-tab="chat"]').click();
+  } else if (doc.status === 'ready' && $('chunksCountBadge').textContent === '0 Chunks') {
+    loadDocumentChunks(docId);
+  }
+}
+
+function deselectDocument() {
+  activeDocId = null;
+  $('emptyWorkspaceState').classList.remove('hidden');
+  $('workspaceHeader').classList.add('hidden');
+  $('workspaceTabs').classList.add('hidden');
+  $('docStatusNotice').classList.add('hidden');
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+}
+
+// Tab Navigation
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    const pane = $('pane-' + tab);
+    if (pane) pane.classList.remove('hidden');
+  };
+});
+
+// SSE Streaming Helper (Real API or Offline Demo Simulation)
+async function streamSSE(url, payload, callbacks) {
+  if (isOfflineMode) {
+    return simulateStreamSSE(url, payload, callbacks);
+  }
+  chatAbortCtrl?.abort();
+  chatAbortCtrl = new AbortController();
+
+  const res = await api(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: chatAbortCtrl.signal
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData?.error?.message || res.statusText);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let boundary;
+    while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+      const eventBlock = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+
+      let eventType = 'message';
+      let eventData = '';
+      for (const line of eventBlock.split('\n')) {
+        if (line.startsWith('event:')) eventType = line.slice(6).trim();
+        else if (line.startsWith('data:')) eventData += line.slice(5).trim();
+      }
+
+      const parsed = eventData ? JSON.parse(eventData) : {};
+      callbacks[eventType]?.(parsed);
+    }
+  }
+}
+
+// Ask Question Handler (Q&A)
+$('askBtn').onclick = async () => {
+  const currentDoc = allDocuments.find(d => d.doc_id === activeDocId);
+  if (!currentDoc || currentDoc.status !== 'ready') {
+    alert("Document is still processing. Please wait until indexing completes.");
+    return;
+  }
+
+  const q = $('chatQuestionInput').value.trim();
+  if (!q) return;
+
+  const isNorm = isNormalDocument(currentDoc);
+  const btn = $('askBtn');
+  const answerBody = $('chatAnswerBody');
+  const statusBadge = $('chatStatusBadge');
+
+  btn.disabled = true;
+  statusBadge.textContent = "Processing…";
+  statusBadge.className = "badge streaming";
+  answerBody.innerHTML = `<span style="color:var(--text-sub);">Analyzing document and generating ${isNorm ? 'factual answer' : 'legal analysis'}…</span>`;
+
+  // Reset sources state
+  chatSourcesState.sources = [];
+  chatSourcesState.validIds = new Set();
+  chatSourcesState.citedIds = new Set();
+  chatSourcesState.filter = 'all';
+  chatSourcesState.allOpen = false;
+  if (!isNorm) {
+    setSourcesFilter('chat', 'all');
+    updateSourcesUI('chat');
+  }
+
+  let answerText = '';
+  let tokenCount = 0;
+  const startTime = performance.now();
+  let firstTokenLatency = null;
+  let renderPending = false;
+
+  function scheduleRender() {
+    if (renderPending) return;
+    renderPending = true;
+    requestAnimationFrame(() => {
+      renderPending = false;
+      answerBody.innerHTML = formatRichText(answerText, chatSourcesState.validIds, isNorm);
+    });
+  }
+
+  try {
+    await streamSSE(`/documents/${activeDocId}/chat`, {
+      question: q,
+      engine: activeEngine
+    }, {
+      sources: (d) => {
+        if (!isNorm) {
+          chatSourcesState.sources = d.sources || [];
+          chatSourcesState.validIds = new Set(chatSourcesState.sources.map(s => s.source_id));
+          updateSourcesUI('chat');
+        }
+      },
+      token: (d) => {
+        if (firstTokenLatency === null) {
+          firstTokenLatency = ((performance.now() - startTime) / 1000).toFixed(1);
+        }
+        answerText += d.text;
+        tokenCount++;
+
+        const elapsed = (performance.now() - startTime) / 1000;
+        const speed = elapsed > 0 ? (tokenCount / elapsed).toFixed(1) : '0.0';
+        const engineTag = (activeEngine === 'cpu') ? '💻 CPU Mode' : '⚡ GPU Mode';
+        statusBadge.textContent = `Streaming… ${speed} tok/s · ${engineTag} (${tokenCount} tokens)`;
+
+        // In legal mode, dynamically detect cited source tags
+        if (!isNorm) {
+          const matches = d.text.match(/\[(?:Sources?:?\s*)?(S\d{1,3})/gi);
+          if (matches) {
+            let newlyFound = false;
+            matches.forEach(m => {
+              const num = m.match(/\d{1,3}/);
+              if (num) {
+                const sid = 'S' + Number(num[0]);
+                if (!chatSourcesState.citedIds.has(sid)) {
+                  chatSourcesState.citedIds.add(sid);
+                  newlyFound = true;
+                }
+              }
+            });
+            if (newlyFound) updateSourcesUI('chat');
+          }
+        }
+
+        scheduleRender();
+      },
+      citations: (d) => {
+        if (!isNorm) {
+          (d.citations || []).forEach(c => chatSourcesState.citedIds.add(c.source_id));
+          updateSourcesUI('chat');
+        }
+      },
+      done: (d) => {
+        scheduleRender();
+        const totalSec = ((performance.now() - startTime) / 1000).toFixed(1);
+        const avgSpeed = totalSec > 0 ? (tokenCount / totalSec).toFixed(1) : '0.0';
+        const engineTag = (activeEngine === 'cpu') ? '💻 CPU Mode' : '⚡ GPU Mode';
+        const ftText = firstTokenLatency ? ` • First token: ${firstTokenLatency}s` : '';
+        statusBadge.textContent = `Complete • ${tokenCount} tok in ${totalSec}s (${avgSpeed} tok/s) · ${engineTag}${ftText}`;
+        statusBadge.className = 'badge complete';
+        if (!isNorm) {
+          if (d.disclaimer) $('chatDisclaimerText').textContent = d.disclaimer;
+          updateSourcesUI('chat');
+        }
+      },
+      error: (d) => {
+        statusBadge.textContent = "Error";
+        statusBadge.className = "badge";
+        answerBody.innerHTML = `<span style="color:var(--high);">Error: ${esc(d.message)}</span>`;
+      }
+    });
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      statusBadge.textContent = "Failed";
+      statusBadge.className = "badge";
+      answerBody.innerHTML = `<span style="color:var(--high);">${esc(err.message)}</span>`;
+    }
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// Risk Analysis / Key Takeaways Handler
+$('analyzeRisksBtn').onclick = async () => {
+  const currentDoc = allDocuments.find(d => d.doc_id === activeDocId);
+  if (!currentDoc || currentDoc.status !== 'ready') {
+    alert("Document is still processing. Please wait until indexing completes.");
+    return;
+  }
+
+  const isNorm = isNormalDocument(currentDoc);
+  const btn = $('analyzeRisksBtn');
+  const container = $('riskItemsContainer');
+  const badge = $('riskCountBadge');
+
+  btn.disabled = true;
+  badge.textContent = "Scanning…";
+  container.innerHTML = `<div style="font-size:13px; color:var(--text-sub);">Analyzing document excerpts via ${activeEngine === 'cpu' ? 'CPU Mode' : 'GPU Mode'}…</div>`;
+
+  riskSourcesState.sources = [];
+  riskSourcesState.validIds = new Set();
+  riskSourcesState.citedIds = new Set();
+  riskSourcesState.filter = 'all';
+  riskSourcesState.allOpen = false;
+  if (!isNorm) {
+    setSourcesFilter('risk', 'all');
+    updateSourcesUI('risk');
+  }
+
+  try {
+    await streamSSE(`/documents/${activeDocId}/risk-analysis`, {
+      party: $('riskPartyInput').value.trim() || null,
+      focus: $('riskFocusInput').value.trim() || null,
+      engine: activeEngine
+    }, {
+      sources: (d) => {
+        if (!isNorm) {
+          riskSourcesState.sources = d.sources || [];
+          riskSourcesState.validIds = new Set(riskSourcesState.sources.map(s => s.source_id));
+          updateSourcesUI('risk');
+        }
+      },
+      risks: (d) => {
+        const risks = d.risks || [];
+        badge.textContent = isNorm ? `${risks.length} Insights` : `${risks.length} Risks`;
+
+        if (!isNorm) {
+          risks.forEach(r => {
+            (r.source_ids || []).forEach(sid => riskSourcesState.citedIds.add(sid));
+          });
+          updateSourcesUI('risk');
+        }
+
+        if (risks.length === 0) {
+          container.innerHTML = `<div style="font-size:13px; color:var(--text-sub);">${isNorm ? 'No specific takeaways found for the given focus.' : 'No specific disadvantages identified for the selected party.'}</div>`;
+          return;
+        }
+
+        if (isNorm) {
+          // NORMAL DOCUMENTS: Clean Insight Cards without Clause Badges
+          container.innerHTML = risks.map((r, i) => `
+            <div class="insight-card">
+              <div class="insight-header">
+                <span class="insight-title">${esc(r.title)}</span>
+                <span class="insight-tag">Takeaway ${i + 1}</span>
+              </div>
+              <div class="insight-body">${formatRichText(r.analysis, null, true)}</div>
+            </div>
+          `).join('');
+          $('riskSourcesWrapper').style.display = 'none';
+        } else {
+          // LEGAL CONTRACTS: Severity Cards with Clause Citations
+          container.innerHTML = risks.map(r => `
+            <div class="risk-card ${esc(r.severity)}">
+              <div class="risk-head">
+                <strong style="font-size:14px;">${esc(r.title)}</strong>
+                <span class="risk-sev ${esc(r.severity)}">${esc(r.severity)} Severity</span>
+              </div>
+              <div style="font-size:13px; line-height:1.6; margin-top:4px;">${formatRichText(r.analysis, riskSourcesState.validIds, false)}</div>
+              <div style="font-size:11.5px; color:var(--text-sub); margin-top:4px;">
+                ${(r.source_ids || []).map(sid => `<button class="cite-tag" data-sid="${sid}">${sid}</button>`).join(' ')}
+              </div>
+            </div>
+          `).join('');
+          $('riskSourcesWrapper').style.display = 'block';
+        }
+      },
+      citations: (d) => {
+        if (!isNorm) {
+          (d.citations || []).forEach(c => riskSourcesState.citedIds.add(c.source_id));
+          updateSourcesUI('risk');
+        }
+      },
+      error: (d) => {
+        container.innerHTML = `<span style="color:var(--high);">Error: ${esc(d.message)}</span>`;
+      }
+    });
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      container.innerHTML = `<span style="color:var(--high);">${esc(err.message)}</span>`;
+    }
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// Summary Handlers
+async function pollSummary() {
+  if (!activeDocId) return;
+  const res = await api(`/documents/${activeDocId}/summary`);
+  if (!res.ok) return;
+  const job = await res.json();
+  renderSummary(job);
+}
+
+function renderSummary(job) {
+  const prog = $('summaryProgressBar');
+  const progText = $('summaryProgressText');
+  clearTimeout(summaryPollTimer);
+
+  if (job.status === 'running') {
+    prog.classList.remove('hidden');
+    progText.style.display = 'block';
+    prog.max = Math.max(1, job.progress_total);
+    prog.value = job.progress_done;
+    progText.textContent = `Summarizing… step ${job.progress_done} of ${job.progress_total || '?'}`;
+    summaryPollTimer = setTimeout(pollSummary, 3000);
+    return;
+  }
+
+  prog.classList.add('hidden');
+  progText.style.display = 'none';
+
+  const doc = allDocuments.find(d => d.doc_id === activeDocId);
+  const isNorm = doc ? isNormalDocument(doc) : false;
+
+  if (job.status === 'ready' || job.status === 'completed') {
+    $('summaryBriefText').innerHTML = formatRichText(job.summary, null, isNorm);
+    $('sectionSummariesContainer').innerHTML = (job.section_summaries || []).map(s => `
+      <details class="source-card">
+        <summary>${esc(s.label)} (pp. ${s.page_start}–${s.page_end})</summary>
+        <pre>${esc(s.summary)}</pre>
+      </details>
+    `).join('');
+  } else if (job.status === 'failed') {
+    $('summaryBriefText').innerHTML = `<span style="color:var(--high);">Summary failed: ${esc(job.error?.message)}</span>`;
+  }
+}
+
+async function triggerSummary(force) {
+  if (!activeDocId) return;
+  try {
+    const res = await api(`/documents/${activeDocId}/summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force, engine: activeEngine })
+    });
+    if (res.ok) {
+      renderSummary(await res.json());
+    } else {
+      $('summaryBriefText').innerHTML = `<span style="color:var(--high);">Failed to initiate summary.</span>`;
+    }
+  } catch (e) {
+    $('summaryBriefText').innerHTML = `<span style="color:var(--high);">${esc(e.message)}</span>`;
+  }
+}
+$('generateSummaryBtn').onclick = () => triggerSummary(false);
+$('forceSummaryBtn').onclick = () => triggerSummary(true);
+
+// Chunks Loader
+async function loadDocumentChunks(docId) {
+  try {
+    const res = await api(`/documents/${docId}/chunks`);
+    if (!res.ok) return;
+    const chunks = await res.json();
+    $('chunksCountBadge').textContent = `${chunks.length} Chunks`;
+    $('chunksListContainer').innerHTML = chunks.map(c => `
+      <div class="source-card">
+        <summary><strong>[${esc(c.chunk_id)}]</strong> ${esc(c.section_label || '')} ${esc(c.section_title || '')} (p. ${c.page_start})</summary>
+        <pre>${esc(c.text)}</pre>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+// Upload Submission
+$('uploadForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const fileInput = $('filePicker');
+  const pwInput = $('pdfPasswordInput');
+  const catSelect = $('docCategorySelect');
+  const feedback = $('uploadFeedback');
+  const submitBtn = $('uploadSubmitBtn');
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    feedback.textContent = "Please select a file to upload.";
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+  if (pwInput.value) formData.append('password', pwInput.value);
+  formData.append('doc_type', activeSection);
+  if (catSelect.value !== 'auto') {
+    formData.append('category', catSelect.value);
+  }
+
+  submitBtn.disabled = true;
+  feedback.textContent = `Uploading ${activeSection === 'normal' ? 'document' : 'contract'} & running extraction pipeline...`;
+
+  try {
+    const res = await api('/documents', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || res.statusText);
+    }
+
+    const doc = await res.json();
+    localStorage.setItem('doctype_' + doc.doc_id, activeSection);
+    if (catSelect.value !== 'auto') {
+      localStorage.setItem('cat_' + doc.doc_id, catSelect.value);
+    }
+
+    feedback.textContent = "Uploaded! Processing OCR & indexing in background...";
+    fileInput.value = '';
+    pwInput.value = '';
+    catSelect.value = 'auto';
+
+    await loadDocuments();
+    selectDocument(doc.doc_id);
+  } catch (err) {
+    feedback.textContent = `Upload failed: ${err.message}`;
+  } finally {
+    submitBtn.disabled = false;
+  }
+};
+
+// Recheck Status Button
+$('refreshStatusBtn').onclick = () => loadDocuments();
+
+// Delete Document
+$('deleteDocBtn').onclick = async () => {
+  if (!activeDocId || !confirm("Delete this document and remove its index?")) return;
+  await api(`/documents/${activeDocId}`, { method: 'DELETE' });
+  localStorage.removeItem('cat_' + activeDocId);
+  localStorage.removeItem('doctype_' + activeDocId);
+  await loadDocuments();
+  deselectDocument();
+};
+
+// Refresh button
+$('refreshDocsBtn').onclick = () => {
+  checkHealth();
+  loadDocuments();
+};
+
+// Initialization
+(async function init() {
+  updateEngineUI();
+  switchSection(activeSection);
+  await checkHealth();
+  await loadDocuments();
+})();
+</script>
+</body>
+</html>

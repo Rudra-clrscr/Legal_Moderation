@@ -18,8 +18,10 @@ from app.schemas import DISCLAIMER, SourceChunk
 from app.services.citations import parse_risk_findings, resolve_citations
 from app.services.llm_generator import ChatMessage, GenerationOptions, LLMGenerator
 from app.services.prompts import (
+    INSIGHTS_QUERIES,
     RISK_QUERIES,
     SYSTEM_PROMPT,
+    build_insights_prompt,
     build_qa_prompt,
     build_risk_prompt,
     format_excerpt,
@@ -71,26 +73,39 @@ class AnalysisService:
         self._settings = settings
 
     async def stream_answer(
-        self, doc_id: str, question: str, top_k: int | None = None
+        self, doc_id: str, question: str, top_k: int | None = None, engine: str | None = None
     ) -> AsyncIterator[StreamEvent]:
         retrieved = await self._vs.search(doc_id, question, top_k or self._settings.retrieval_top_k)
         async for event in self._stream_grounded(
-            retrieved, lambda excerpts: build_qa_prompt(excerpts, question), parse_risks=False
+            retrieved, lambda excerpts: build_qa_prompt(excerpts, question), parse_risks=False, engine=engine
         ):
             yield event
 
     async def stream_risk_analysis(
-        self, doc_id: str, party: str | None = None, focus: str | None = None
+        self,
+        doc_id: str,
+        party: str | None = None,
+        focus: str | None = None,
+        engine: str | None = None,
+        is_normal_doc: bool = False,
     ) -> AsyncIterator[StreamEvent]:
-        queries = list(RISK_QUERIES)
-        if focus and focus.strip():
-            # Focus queries go first so they win the context budget.
-            queries = [focus.strip(), f"{focus.strip()} obligations liability restrictions"] + queries[:4]
+        if is_normal_doc:
+            queries = list(INSIGHTS_QUERIES)
+            if focus and focus.strip():
+                queries = [focus.strip(), f"{focus.strip()} findings methodology results"] + queries[:4]
+            prompt_builder = lambda excerpts: build_insights_prompt(excerpts, focus)
+        else:
+            queries = list(RISK_QUERIES)
+            if focus and focus.strip():
+                queries = [focus.strip(), f"{focus.strip()} obligations liability restrictions"] + queries[:4]
+            prompt_builder = lambda excerpts: build_risk_prompt(excerpts, party, focus)
+
         per_query = await self._vs.search_many(doc_id, queries, self._settings.risk_queries_top_k)
         async for event in self._stream_grounded(
             interleave(per_query),
-            lambda excerpts: build_risk_prompt(excerpts, party, focus),
+            prompt_builder,
             parse_risks=True,
+            engine=engine,
         ):
             yield event
 
@@ -115,7 +130,9 @@ class AnalysisService:
         chosen.sort(key=lambda r: r.chunk.index)
         return [to_source(f"S{i}", r) for i, r in enumerate(chosen, start=1)]
 
-    async def _stream_grounded(self, retrieved, build_user, *, parse_risks: bool) -> AsyncIterator[StreamEvent]:
+    async def _stream_grounded(
+        self, retrieved, build_user, *, parse_risks: bool, engine: str | None = None
+    ) -> AsyncIterator[StreamEvent]:
         fixed_tokens = self._llm.count_tokens(
             self._llm.render_prompt(
                 [ChatMessage("system", SYSTEM_PROMPT), ChatMessage("user", build_user(""))]
@@ -141,6 +158,7 @@ class AnalysisService:
             temperature=self._settings.llm_temperature,
             top_p=self._settings.llm_top_p,
             repetition_penalty=self._settings.llm_repetition_penalty,
+            engine=engine or "auto",
         )
         parts: list[str] = []
         async for piece in self._llm.stream(messages, options):

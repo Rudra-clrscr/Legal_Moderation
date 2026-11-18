@@ -39,13 +39,24 @@ class Settings(BaseSettings):
     embedding_device: str = "cpu"
     embedding_batch_size: int = 32
     chroma_collection: str = "legal_chunks"
-    retrieval_top_k: int = 6
+    retrieval_top_k: int = 3  # 3 high-relevance chunks optimizes prompt speed and avoids CPU prefill lag
     risk_queries_top_k: int = 3
 
-    # --- LLM (onnxruntime-genai) --------------------------------------------
-    llm_model_path: Path = Path("models/qwen2.5-7b-instruct-awq-onnx-int4")
+    # --- LLM Providers & Inference -----------------------------------------
+    # "auto" detects if local Ollama is active on port 11434 (sub-second latency & 50+ tok/s).
+    # If Ollama is offline or unavailable, automatically falls back to local ONNX (DirectML / CPU).
+    llm_provider: Literal["auto", "ollama", "onnx"] = "auto"
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5:3b"
+
+    # DirectML int4 model utilizes the GPU for fast token streaming; fallback to CPU folder if absent.
+    llm_model_path: Path = (
+        Path("models/qwen2.5-7b-instruct-awq-onnx-int4-dml")
+        if Path("models/qwen2.5-7b-instruct-awq-onnx-int4-dml").exists()
+        else Path("models/qwen2.5-7b-instruct-awq-onnx-int4")
+    )
     llm_prompt_template: Literal["chatml", "mistral"] = "chatml"  # chatml=Qwen2.5, mistral=SaulLM
-    llm_execution_provider: str | None = None  # e.g. "cuda", "dml"; None = use genai_config.json
+    llm_execution_provider: str | None = "dml" if Path("models/qwen2.5-7b-instruct-awq-onnx-int4-dml").exists() else None
     llm_context_window: int = 8192
     llm_max_new_tokens: int = 1024
     llm_temperature: float = 0.1
