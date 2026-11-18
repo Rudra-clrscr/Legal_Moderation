@@ -24,11 +24,30 @@ MIN_NEW_TOKENS = 64
 
 
 def load_model(og: Any, model_path: str, execution_provider: str | None):
+    import json
+    import os
+
     config = og.Config(model_path)
     if execution_provider:
         config.clear_providers()
         if execution_provider.lower() != "cpu":
             config.append_provider(execution_provider)
+    elif "-dml" in str(model_path).lower():
+        try:
+            config.clear_providers()
+            config.append_provider("dml")
+        except Exception:
+            pass
+
+    # Thread optimization: default to physical core count (6) when on CPU to prevent
+    # excessive cache misses / context switches caused by logical hyperthreads.
+    threads = os.environ.get("LEGAL_LLM_THREADS", "6")
+    try:
+        if not execution_provider or execution_provider.lower() == "cpu":
+            config.overlay(json.dumps({"model": {"decoder": {"session_options": {"intra_op_num_threads": int(threads)}}}}))
+    except Exception:
+        pass
+
     model = og.Model(config)
     return model, og.Tokenizer(model)
 

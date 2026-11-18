@@ -13,9 +13,10 @@ pillow>=10.4
 chromadb>=0.5.20
 sentence-transformers>=3.0
 
-# LLM inference. CPU build; for GPU swap in onnxruntime-genai-cuda (NVIDIA)
-# or onnxruntime-genai-directml (any DirectX 12 GPU on Windows).
-onnxruntime-genai>=0.7
+# LLM inference. DirectML build for GPU acceleration on Windows (DirectX 12 on NVIDIA / AMD).
+# For CPU-only environments, swap to onnxruntime and onnxruntime-genai.
+onnxruntime-directml>=1.24.4
+onnxruntime-genai-directml>=0.13.1
 
 # Word (.doc/.docx) conversion through MS Word on Windows. LibreOffice (soffice on PATH) is used when present.
 pywin32>=306; sys_platform == "win32"

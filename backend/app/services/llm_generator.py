@@ -46,6 +46,7 @@ class GenerationOptions:
     temperature: float = 0.1
     top_p: float = 0.9
     repetition_penalty: float = 1.05
+    engine: Literal["auto", "gpu", "cpu"] = "auto"
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +116,9 @@ class LLMGenerator:
         self,
         model_path: Path,
         *,
+        provider: Literal["auto", "ollama", "onnx"] = "onnx",
+        ollama_base_url: str = "http://127.0.0.1:11434",
+        ollama_model: str = "qwen2.5:3b",
         template: str = "chatml",
         execution_provider: str | None = None,
         context_window: int = 8192,
@@ -124,6 +128,9 @@ class LLMGenerator:
         if template not in TEMPLATES:
             raise ValueError(f"Unknown prompt template {template!r}; choose from {sorted(TEMPLATES)}")
         self.model_path = model_path
+        self.provider = provider
+        self.ollama_base_url = ollama_base_url
+        self.ollama_model = ollama_model
         self.execution_provider = execution_provider
         self.context_window = context_window
         self.defaults = defaults
@@ -140,11 +147,15 @@ class LLMGenerator:
         self._tokenizer = None
         self._state: Literal["not_loaded", "loading", "ready", "error"] = "not_loaded"
         self._load_error: str | None = None
+        self._active_provider: str = provider
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "LLMGenerator":
         return cls(
             settings.llm_model_path,
+            provider=settings.llm_provider,
+            ollama_base_url=settings.ollama_base_url,
+            ollama_model=settings.ollama_model,
             template=settings.llm_prompt_template,
             execution_provider=settings.llm_execution_provider,
             context_window=settings.llm_context_window,
@@ -159,15 +170,53 @@ class LLMGenerator:
     # -- Lifecycle -------------------------------------------------------------
     @property
     def status(self) -> dict[str, str | None]:
-        return {"state": self._state, "error": self._load_error, "model_path": str(self.model_path)}
+        active = getattr(self, "_active_provider", self.provider)
+        path_or_model = self.ollama_model if active == "ollama" else str(self.model_path)
+        return {"state": self._state, "error": self._load_error, "provider": active, "model_path": path_or_model}
+
+    def _probe_ollama(self) -> bool:
+        """Check if local Ollama server is running and responsive."""
+        import httpx
+        try:
+            r = httpx.get(f"{self.ollama_base_url.rstrip('/')}/api/tags", timeout=1.5)
+            if r.status_code == 200:
+                models = [m.get("name", "") for m in r.json().get("models", [])]
+                logger.info("Ollama is reachable at %s (models: %s)", self.ollama_base_url, models)
+                target_base = self.ollama_model.split(":")[0]
+                has_model = any(self.ollama_model in m or target_base in m for m in models)
+                if has_model or not models:
+                    return True
+                logger.warning("Configured Ollama model %r not in %s; will attempt to use anyway", self.ollama_model, models)
+                return True
+            return False
+        except Exception as exc:
+            logger.debug("Ollama probe check failed (%s): %s", self.ollama_base_url, exc)
+            return False
 
     def load(self) -> None:
-        """Blocking: start the worker and wait for the model to load. Safe to call repeatedly;
+        """Blocking: start the worker or connect to Ollama. Safe to call repeatedly;
         retries after a failure or a worker crash."""
         with self._load_lock:
             if self._state == "ready":
                 return
             self._state = "loading"
+
+            # 1. Check Ollama if provider is "auto" or "ollama"
+            if self.provider in ("auto", "ollama"):
+                if self._probe_ollama():
+                    self._active_provider = "ollama"
+                    self._tokenizer = _load_counting_tokenizer(self.model_path)
+                    self._state, self._load_error = "ready", None
+                    logger.info("LLM ready using Ollama provider (%s)", self.ollama_model)
+                    return
+                elif self.provider == "ollama":
+                    self._state, self._load_error = "error", f"Ollama not reachable at {self.ollama_base_url}"
+                    raise ModelUnavailableError(self._load_error)
+                else:
+                    logger.info("Ollama not running; falling back to local ONNX model")
+
+            # 2. Local ONNX worker process
+            self._active_provider = "onnx"
             try:
                 if not self.model_path.is_dir():
                     raise ModelUnavailableError(
@@ -186,7 +235,7 @@ class LLMGenerator:
                 self._reader = threading.Thread(target=self._read_loop, args=(conn,), name="llm-reader", daemon=True)
                 self._reader.start()
                 self._state, self._load_error = "ready", None
-                logger.info("LLM ready")
+                logger.info("LLM ready via ONNX")
             except ModelUnavailableError as exc:
                 self._state, self._load_error = "error", exc.message
                 raise
@@ -250,11 +299,52 @@ class LLMGenerator:
         return len(self._tokenizer.encode(text, add_special_tokens=False).ids)
 
     # -- Generation ------------------------------------------------------------------
+    async def _stream_ollama(
+        self, messages: Sequence[ChatMessage], options: GenerationOptions
+    ) -> AsyncIterator[str]:
+        from openai import AsyncOpenAI
+        v1_url = f"{self.ollama_base_url.rstrip('/')}/v1"
+        client = AsyncOpenAI(base_url=v1_url, api_key="ollama", timeout=60.0)
+        formatted = [{"role": m.role, "content": m.content} for m in messages]
+        extra_body: dict[str, Any] = {}
+        if options.engine == "cpu":
+            extra_body["options"] = {"num_gpu": 0}
+        elif options.engine == "gpu":
+            extra_body["options"] = {"num_gpu": 99}
+        try:
+            resp = await client.chat.completions.create(
+                model=self.ollama_model,
+                messages=formatted,
+                stream=True,
+                temperature=options.temperature,
+                top_p=options.top_p,
+                max_tokens=options.max_new_tokens,
+                extra_body=extra_body if extra_body else None,
+            )
+            async for chunk in resp:
+                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                    piece = chunk.choices[0].delta.content
+                    for tok in _SPECIAL_TOKENS:
+                        piece = piece.replace(tok, "")
+                    if piece:
+                        yield piece
+        except Exception as exc:
+            logger.exception("Ollama generation error: %s", exc)
+            raise LLMGenerationError(f"Ollama generation failed: {exc}") from exc
+        finally:
+            await client.close()
+
     async def stream(
         self, messages: Sequence[ChatMessage], options: GenerationOptions | None = None
     ) -> AsyncIterator[str]:
         await self.ensure_ready()
         opts = options or self.defaults
+
+        if getattr(self, "_active_provider", None) == "ollama":
+            async for piece in self._stream_ollama(messages, opts):
+                yield piece
+            return
+
         prompt = self.render_prompt(messages)
         if self.count_tokens(prompt) + MIN_NEW_TOKENS > self.context_window:
             raise PromptTooLongError(f"The prompt does not fit the {self.context_window}-token context window.")

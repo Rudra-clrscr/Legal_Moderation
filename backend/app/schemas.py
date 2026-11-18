@@ -46,6 +46,8 @@ class DocumentInfo(BaseModel):
     doc_id: str
     filename: str
     status: DocumentStatus
+    doc_type: str = "legal"  # "legal" | "normal"
+    category: str = "auto"
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
     chunk_count: int = 0
@@ -57,6 +59,7 @@ class DocumentInfo(BaseModel):
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     top_k: int | None = Field(default=None, ge=1, le=20)
+    engine: Literal["auto", "gpu", "cpu"] | None = None
 
 
 class RiskAnalysisRequest(BaseModel):
@@ -68,10 +71,12 @@ class RiskAnalysisRequest(BaseModel):
     focus: str | None = Field(
         default=None, max_length=500, description="Optional topic to focus on, e.g. 'termination'."
     )
+    engine: Literal["auto", "gpu", "cpu"] | None = None
 
 
 class SummaryRequest(BaseModel):
     force: bool = False
+    engine: Literal["auto", "gpu", "cpu"] | None = None
 
 
 # --- Citations & analysis results ---------------------------------------------------

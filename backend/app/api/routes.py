@@ -41,7 +41,7 @@ async def _sse(events: AsyncIterator[StreamEvent]) -> AsyncIterator[str]:
         yield format_sse("error", {"code": "INTERNAL_ERROR", "message": "Unexpected error during analysis."})
 
 
-# --- Health -------------------------------------------------------------------------
+# --- Health & Engine ------------------------------------------------------------------
 @router.get("/health")
 async def health(c: Container = Depends(get_container)) -> dict[str, Any]:
     return {
@@ -52,11 +52,28 @@ async def health(c: Container = Depends(get_container)) -> dict[str, Any]:
     }
 
 
+@router.get("/engine")
+async def get_engine(c: Container = Depends(get_container)) -> dict[str, str]:
+    return {
+        "engine": getattr(c.llm, "default_engine", "auto"),
+        "provider": c.llm.status.get("provider", "unknown") or "unknown",
+    }
+
+
+@router.post("/engine")
+async def set_engine(data: dict[str, str], c: Container = Depends(get_container)) -> dict[str, str]:
+    engine = data.get("engine", "auto")
+    c.llm.default_engine = engine
+    return {"engine": engine, "status": "ok"}
+
+
 # --- Documents ------------------------------------------------------------------------
 @router.post("/documents", status_code=202, response_model=DocumentInfo)
 async def upload_document(
     file: UploadFile = File(...),
     password: str | None = Form(default=None),
+    doc_type: str | None = Form(default=None),
+    category: str | None = Form(default=None),
     c: Container = Depends(get_container),
 ) -> DocumentInfo:
     c.settings.tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -71,7 +88,14 @@ async def upload_document(
                 out.write(chunk)
         if size == 0:
             raise LegalBotError("The uploaded file is empty.")
-        return await c.ingestion.ingest(tmp_path, file.filename, password or None)
+        info = await c.ingestion.ingest(tmp_path, file.filename, password or None)
+        if doc_type or category:
+            info = c.registry.update(
+                info.doc_id,
+                doc_type=doc_type or "legal",
+                category=category or "auto",
+            )
+        return info
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -108,7 +132,7 @@ async def list_chunks(doc_id: str, c: Container = Depends(get_container)) -> lis
 async def chat(doc_id: str, body: ChatRequest, c: Container = Depends(get_container)) -> StreamingResponse:
     c.registry.require_ready(doc_id)
     await c.llm.ensure_ready()  # fail with a proper HTTP status before the stream starts
-    events = c.analysis.stream_answer(doc_id, body.question, body.top_k)
+    events = c.analysis.stream_answer(doc_id, body.question, body.top_k, engine=body.engine)
     return StreamingResponse(_sse(events), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
@@ -116,9 +140,12 @@ async def chat(doc_id: str, body: ChatRequest, c: Container = Depends(get_contai
 async def risk_analysis(
     doc_id: str, body: RiskAnalysisRequest, c: Container = Depends(get_container)
 ) -> StreamingResponse:
-    c.registry.require_ready(doc_id)
+    doc = c.registry.require_ready(doc_id)
     await c.llm.ensure_ready()
-    events = c.analysis.stream_risk_analysis(doc_id, body.party, body.focus)
+    is_normal = (getattr(doc, "doc_type", "legal") == "normal")
+    events = c.analysis.stream_risk_analysis(
+        doc_id, body.party, body.focus, engine=body.engine, is_normal_doc=is_normal
+    )
     return StreamingResponse(_sse(events), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
