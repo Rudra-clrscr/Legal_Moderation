@@ -5,15 +5,18 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.container import Container
-from app.errors import FileTooLargeError, LegalBotError
+from app.errors import DocumentUnreadableError, FileTooLargeError, LegalBotError
+from app.profile_schemas import BONCProfileExtraction
 from app.schemas import ChatRequest, DocumentInfo, RiskAnalysisRequest, SummaryJob, SummaryRequest
 from app.services.analysis_service import StreamEvent
+from app.services.profile_extractor import ProfileExtractionService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -174,3 +177,31 @@ class _NoSummary(LegalBotError):
 
     def __init__(self) -> None:
         super().__init__("No summary has been generated for this document yet.")
+
+
+# --- BONC Profile ---------------------------------------------------------------------
+@router.post("/profile/extract-resume", response_model=BONCProfileExtraction)
+async def extract_resume(
+    file: UploadFile = File(...),
+    c: Container = Depends(get_container),
+) -> BONCProfileExtraction:
+    c.settings.tmp_dir.mkdir(parents=True, exist_ok=True)
+    raw_suffix = Path(file.filename or "").suffix.lower()
+    suffix = raw_suffix if raw_suffix in {".pdf", ".doc", ".docx"} else ""
+    tmp_path = c.settings.tmp_dir / f"resume_{uuid.uuid4().hex}{suffix}"
+    try:
+        size = 0
+        with tmp_path.open("wb") as out:
+            while chunk := await file.read(_UPLOAD_READ_SIZE):
+                size += len(chunk)
+                if size > c.settings.max_resume_upload_bytes:
+                    raise FileTooLargeError(
+                        f"Resumes must be {c.settings.max_resume_upload_mb} MB or smaller."
+                    )
+                out.write(chunk)
+        if size == 0:
+            raise DocumentUnreadableError("The uploaded resume file is empty.")
+        extractor = c.profile_extractor or ProfileExtractionService(c.parser, c.llm, c.settings)
+        return await extractor.extract_from_file(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)

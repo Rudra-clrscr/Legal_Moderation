@@ -11,6 +11,7 @@ from app.services.document_parser import DocumentParser
 from app.services.document_registry import DocumentRegistry
 from app.services.ingestion_service import IngestionService
 from app.services.llm_generator import LLMGenerator
+from app.services.profile_extractor import ProfileExtractionService
 from app.services.summarizer import DocumentSummarizer, SummaryJobManager
 from app.services.vector_store import Embedder, VectorStore
 
@@ -25,6 +26,7 @@ class Container:
     ingestion: IngestionService
     analysis: AnalysisService
     summaries: SummaryJobManager
+    profile_extractor: ProfileExtractionService | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -41,6 +43,7 @@ def build_container(settings: Settings) -> Container:
     embedder = Embedder(settings.embedding_model, settings.embedding_device, settings.embedding_batch_size)
     vector_store = VectorStore(settings.chroma_dir, settings.chroma_collection, embedder)
     llm = LLMGenerator.from_settings(settings)
+    profile_extractor = ProfileExtractionService(parser, llm, settings)
 
     return Container(
         settings=settings,
@@ -51,4 +54,5 @@ def build_container(settings: Settings) -> Container:
         ingestion=IngestionService(registry, parser, chunker, vector_store),
         analysis=AnalysisService(vector_store, llm, settings),
         summaries=SummaryJobManager(DocumentSummarizer(vector_store, llm, settings), registry),
+        profile_extractor=profile_extractor,
     )

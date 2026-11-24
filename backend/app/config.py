@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     # --- Storage -----------------------------------------------------------
     data_dir: Path = Path("data")
     max_upload_mb: int = 50
+    max_resume_upload_mb: int = 10
     max_pages: int = 500
 
     # --- Parsing / OCR -----------------------------------------------------
@@ -69,6 +70,9 @@ class Settings(BaseSettings):
     summary_map_max_new_tokens: int = 450
     summary_reduce_max_new_tokens: int = 1200
 
+    # --- Profile extraction -------------------------------------------------
+    profile_max_new_tokens: int = 1536
+
     @property
     def documents_dir(self) -> Path:
         return self.data_dir / "documents"
@@ -84,6 +88,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def max_resume_upload_bytes(self) -> int:
+        return self.max_resume_upload_mb * 1024 * 1024
 
 
 @lru_cache
