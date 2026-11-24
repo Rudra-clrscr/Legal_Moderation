@@ -16,7 +16,7 @@ from app.main import create_app
 from app.profile_schemas import BONCProfileExtraction
 from app.services.analysis_service import AnalysisService
 from app.services.chunker import MarkdownChunker
-from app.services.document_parser import DocumentParser, PyPdfTextStrategy
+from app.services.document_parser import DocumentParser, ParsedPage, PyPdfTextStrategy
 from app.services.document_registry import DocumentRegistry
 from app.services.ingestion_service import IngestionService
 from app.services.profile_extractor import ProfileExtractionService, parse_profile_json
@@ -372,6 +372,79 @@ def test_extract_resume_empty_and_oversized_file(tmp_path):
         assert res_big.status_code == 413
         assert res_big.json()["error"]["code"] == "FILE_TOO_LARGE"
         assert list(container.settings.tmp_dir.iterdir()) == []
+
+
+def test_social_link_platform_follows_url_domain():
+    data = BONCProfileExtraction.model_validate(
+        {
+            "networking": {
+                "social_links": [
+                    {"platform": "LinkedIn", "url": "https://github.com/rohank-example"},
+                    {"platform": None, "url": "www.linkedin.com/in/someone"},
+                    {"platform": "Other", "url": "https://x.com/someone"},
+                    {"platform": "Website", "url": "https://dribbble.com/someone"},
+                    {"platform": "LinkedIn", "url": "https://notlinkedin.com.example.org/me"},
+                ]
+            }
+        }
+    )
+    assert [s.platform for s in data.networking.social_links] == [
+        "GitHub",
+        "LinkedIn",
+        "Twitter",
+        "Website",
+        "LinkedIn",
+    ]
+
+
+class SpyOcrStrategy:
+    """Stands in for the shared OCR chain (Marker etc.) and records whether it was used."""
+
+    name = "spy_ocr"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def is_available(self) -> bool:
+        return True
+
+    def extract(self, pdf_path):
+        self.calls += 1
+        return [ParsedPage(1, "OCR CHAIN TEXT " + "Experienced engineer building payment systems. " * 20)]
+
+
+def _read_with(tmp_path, pdf_bytes: bytes, *, prefer_text_layer: bool = True) -> tuple[str, SpyOcrStrategy]:
+    settings = Settings(data_dir=tmp_path, llm_load_on_startup=False, profile_prefer_text_layer=prefer_text_layer)
+    spy = SpyOcrStrategy()
+    parser = DocumentParser([spy])
+    service = ProfileExtractionService(parser, StubLLM(), settings)
+    src = tmp_path / "resume.pdf"
+    src.write_bytes(pdf_bytes)
+    work = tmp_path / "work"
+    work.mkdir(exist_ok=True)
+    return service._read_resume_text(parser.prepare(src, work, None)), spy
+
+
+def test_digital_resume_uses_text_layer_with_line_breaks(tmp_path):
+    text, spy = _read_with(tmp_path, make_text_pdf(RESUME_PAGES))
+    assert spy.calls == 0
+    lines = text.splitlines()
+    # The name heading survives as its own line (Marker tends to drop it on resumes).
+    assert "AARAV MEHTA" in lines
+    assert "Senior Software Engineer | Gurgaon, India" in lines
+
+
+def test_low_text_resume_falls_back_to_shared_ocr_chain(tmp_path):
+    # Like a scanned resume: almost no embedded text, so the text layer fails the quality gate.
+    text, spy = _read_with(tmp_path, make_text_pdf([["Scan"]]))
+    assert spy.calls == 1
+    assert text.startswith("OCR CHAIN TEXT")
+
+
+def test_text_layer_preference_can_be_disabled(tmp_path):
+    text, spy = _read_with(tmp_path, make_text_pdf(RESUME_PAGES), prefer_text_layer=False)
+    assert spy.calls == 1
+    assert text.startswith("OCR CHAIN TEXT")
 
 
 def test_extract_resume_encrypted_and_blank_pdf(env):

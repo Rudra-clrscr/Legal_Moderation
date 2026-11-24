@@ -538,14 +538,15 @@ function matchEnum(v, options) {
   const syn = SYNONYMS[k];
   return syn && options.includes(syn) ? syn : null;
 }
+const URL_PLATFORMS = [
+  ['linkedin.com', 'LinkedIn'], ['github.com', 'GitHub'], ['instagram.com', 'Instagram'],
+  ['facebook.com', 'Facebook'], ['fb.com', 'Facebook'], ['twitter.com', 'Twitter'], ['x.com', 'Twitter'],
+];
+// Platform implied by a well-known domain, or null for other sites.
 function platformFromUrl(url) {
-  const u = String(url).toLowerCase();
-  if (u.includes('linkedin.')) return 'LinkedIn';
-  if (/(^|[/.])(twitter|x)\.com/.test(u)) return 'Twitter';
-  if (u.includes('instagram.')) return 'Instagram';
-  if (u.includes('facebook.') || u.includes('fb.com')) return 'Facebook';
-  if (u.includes('github.')) return 'GitHub';
-  return 'Website';
+  const host = String(url).trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').split('/')[0].split(':')[0];
+  const hit = URL_PLATFORMS.find(([d]) => host === d || host.endsWith('.' + d));
+  return hit ? hit[1] : null;
 }
 
 /* ======================================================================
@@ -607,7 +608,10 @@ function normalizeProfile(raw) {
   const seenUrls = new Set();
   N.social_links = arr(n.social_links).map(s => {
     const url = str(s.url);
-    return url ? { platform: matchEnum(s.platform, ENUMS.platform) || platformFromUrl(url), url } : null;
+    if (!url) return null;
+    // A well-known domain beats the model's label (it often copies "LinkedIn" onto any link).
+    const platform = platformFromUrl(url) || matchEnum(s.platform, ENUMS.platform) || 'Website';
+    return { platform, url };
   }).filter(s => s && !seenUrls.has(normKey(s.url)) && seenUrls.add(normKey(s.url)));
 
   const period = (x, flag, label) => {
@@ -1322,7 +1326,9 @@ function startExtraction(file) {
     renderResult({
       kind: 'err',
       title: unavailable ? 'Resume autofill is not available yet' : "We couldn't extract your resume",
-      body: unavailable ? `The extraction service didn't respond at ${CONFIG.extractUrl} (HTTP ${r.status}).` : responseErrorSync(r.status, r.responseText),
+      body: unavailable
+        ? `The server has no resume extraction endpoint at ${CONFIG.extractUrl} (HTTP ${r.status}). If the backend was updated recently, restart it.`
+        : responseErrorSync(r.status, r.responseText),
       sample: unavailable,
     });
   };

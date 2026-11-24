@@ -201,9 +201,35 @@ class BasicDetails(BaseModel):
         return self
 
 
+_URL_PLATFORMS = (
+    ("linkedin.com", "LinkedIn"),
+    ("github.com", "GitHub"),
+    ("instagram.com", "Instagram"),
+    ("facebook.com", "Facebook"),
+    ("fb.com", "Facebook"),
+    ("twitter.com", "Twitter"),
+    ("x.com", "Twitter"),
+)
+
+
+def platform_from_url(url: str) -> str | None:
+    """Platform implied by a well-known domain, or None for other sites."""
+    host = re.sub(r"^[a-z][a-z0-9+.-]*://", "", url.strip().lower()).split("/")[0].split(":")[0]
+    for domain, platform in _URL_PLATFORMS:
+        if host == domain or host.endswith("." + domain):
+            return platform
+    return None
+
+
 class SocialLink(BaseModel):
     platform: SocialPlatform = "Other"
     url: str
+
+    @model_validator(mode="after")
+    def _trust_url_over_label(self) -> "SocialLink":
+        # Small models often copy the prompt's example label ("LinkedIn") onto any link.
+        self.platform = platform_from_url(self.url) or self.platform
+        return self
 
     @field_validator("platform", mode="before")
     @classmethod

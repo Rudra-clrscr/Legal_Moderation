@@ -24,7 +24,14 @@ from app.profile_schemas import (
     SOCIAL_PLATFORM_OPTIONS,
     WORK_MODE_OPTIONS,
 )
-from app.services.document_parser import DocumentParser, detect_file_type
+from app.services.document_parser import (
+    DocumentParser,
+    ParsedPage,
+    PreparedDocument,
+    assess_quality,
+    clean_markdown,
+    detect_file_type,
+)
 from app.services.llm_generator import ChatMessage, GenerationOptions, LLMGenerator
 
 logger = logging.getLogger(__name__)
@@ -164,6 +171,22 @@ def parse_profile_json(raw: str) -> dict[str, Any]:
     return obj
 
 
+def read_text_layer(pdf_path: Path) -> list[ParsedPage]:
+    """The PDF's embedded text with line breaks kept.
+
+    Resume lines are usually separate facts (name, phone, a date range), so unlike the contract
+    pipeline we do not merge them into paragraphs.
+    """
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(pdf_path), strict=False)
+    return [ParsedPage(i + 1, clean_markdown(page.extract_text() or "")) for i, page in enumerate(reader.pages)]
+
+
+def _join_pages(pages: list[ParsedPage]) -> str:
+    return "\n\n".join(p.markdown for p in pages if p.markdown.strip()).strip()
+
+
 class ProfileExtractionService:
     """Extracts structured BONC profile data from PDF/DOC/DOCX resumes without persistence."""
 
@@ -197,6 +220,28 @@ class ProfileExtractionService:
             trimmed = trimmed[: int(len(trimmed) * 0.9)].strip()
         return trimmed
 
+    def _read_resume_text(self, prepared: PreparedDocument) -> str:
+        """Prefer the PDF's own text layer; fall back to the shared OCR chain (legal/normal docs).
+
+        On digital resumes the text layer is exact and keeps the name heading, which Marker tends
+        to drop. Scanned resumes have no usable text layer, so they fail the same quality gate the
+        OCR chain uses and go through Marker / enhanced OCR as before.
+        """
+        if self._settings.profile_prefer_text_layer:
+            try:
+                pages = read_text_layer(prepared.path)
+            except Exception as exc:  # damaged PDF: let the OCR chain try
+                logger.warning("Resume text layer unreadable, using the OCR chain: %s", exc)
+                pages = []
+            quality = assess_quality(pages, self._parser.min_chars_per_page)
+            if quality.score >= self._parser.quality_threshold:
+                logger.info("Resume text from PDF text layer (quality %.3f)", quality.score)
+                return _join_pages(pages)
+            logger.info("Resume text layer quality %.3f below threshold; using the OCR chain", quality.score)
+        parsed = self._parser.parse(prepared)
+        logger.info("Resume text from OCR chain: %s (quality %.3f)", parsed.parser_used, parsed.quality_score)
+        return _join_pages(parsed.pages)
+
     async def extract_from_file(self, src_path: Path) -> BONCProfileExtraction:
         file_type = await asyncio.to_thread(detect_file_type, src_path)
         if file_type not in {"pdf", "word"}:
@@ -208,9 +253,8 @@ class ProfileExtractionService:
         with tempfile.TemporaryDirectory(dir=self._settings.tmp_dir, ignore_cleanup_errors=True) as work_tmp:
             work_dir = Path(work_tmp)
             prepared = await asyncio.to_thread(self._parser.prepare, src_path, work_dir, None)
-            parsed = await asyncio.to_thread(self._parser.parse, prepared)
+            resume_text = await asyncio.to_thread(self._read_resume_text, prepared)
 
-        resume_text = "\n\n".join(p.markdown for p in parsed.pages if p.markdown.strip()).strip()
         if not resume_text:
             raise DocumentUnreadableError("No readable text could be extracted from the resume.")
 
