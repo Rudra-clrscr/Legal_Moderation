@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Profile · BONC Network</title>
+<!--
+  BONC profile page with resume autofill (frontend only).
+
+  Backend contract (owned by the backend team) — see CONFIG below:
+    POST CONFIG.extractUrl   multipart/form-data, field "file" (.pdf/.doc/.docx)
+      200 → JSON matching the BONCProfileExtraction schema
+            (bare object, or wrapped as {"profile": {...}} / {"data": {...}})
+      4xx/5xx → {"error": {"code", "message"}} or FastAPI {"detail": ...}
+    PUT  CONFIG.saveUrl      application/json, same schema shape
+      (null → profile is kept as a local draft in localStorage)
+
+  Dev helpers:
+    /profile.html?mock=1     skip the network and autofill with sample data
+    window.BONCProfile       { getData(), setData(obj), applyExtraction(obj, {replace}) }
+-->
+<style>
+  :root {
+    /* BONC Network brand tokens (from boncnetwork.com stylesheet) */
+    --brand: #1f5dac;
+    --brand-hover: #1a4f94;
+    --brand-light: #2f74c9;
+    --brand-soft: #eaf3ff;
+    --brand-border: #b9d3f3;
+    --brand-ring: rgba(31, 93, 172, 0.18);
+
+    --ink: #0f172b;
+    --ink-2: #314158;
+    --muted: #45556c;
+    --sub: #62748e;
+    --faint: #90a1b9;
+    --line: #e2e8f0;
+    --line-2: #cad5e2;
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+
+    --danger: #c81e1e;
+    --danger-soft: #fef2f2;
+    --danger-border: #fecaca;
+    --success: #15803d;
+    --success-soft: #f0fdf4;
+    --success-border: #bbf7d0;
+    --warn: #a16207;
+    --warn-soft: #fffbeb;
+    --warn-border: #fde68a;
+
+    --r-sm: 8px;
+    --r-md: 10px;
+    --r-lg: 14px;
+    --shadow: 0 1px 2px rgba(15, 23, 43, 0.04), 0 1px 3px rgba(15, 23, 43, 0.06);
+    --shadow-lg: 0 10px 30px -10px rgba(15, 23, 43, 0.25);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  a { color: var(--brand); }
+  [hidden] { display: none !important; }
+
+  /* ---------- Top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    max-width: 1080px; margin: 0 auto; padding: 10px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+  .logo-mark {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--brand-light), var(--brand));
+    color: #fff; font-weight: 800; font-size: 17px;
+    display: grid; place-items: center; letter-spacing: -0.5px;
+  }
+  .logo-text { font-weight: 700; font-size: 16px; letter-spacing: -0.2px; }
+  .logo-text span { color: var(--brand); }
+  .back-link {
+    font-size: 13px; font-weight: 500; text-decoration: none; color: var(--muted);
+    padding: 6px 10px; border-radius: var(--r-sm); border: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .back-link:hover { color: var(--brand); border-color: var(--brand-border); background: var(--brand-soft); }
+
+  .page { max-width: 1080px; margin: 0 auto; padding: 20px 16px 110px; }
+  .page-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .page-head h1 { margin: 0; font-size: 22px; letter-spacing: -0.3px; }
+  .page-head p { margin: 2px 0 0; color: var(--sub); font-size: 13px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow);
+  }
+
+  /* ---------- Summary ---------- */
+  .summary { display: flex; align-items: center; gap: 16px; padding: 18px; margin-bottom: 16px; }
+  .avatar {
+    flex: none; width: 64px; height: 64px; border-radius: 50%;
+    background: var(--brand-soft); color: var(--brand);
+    display: grid; place-items: center; font-weight: 700; font-size: 22px;
+    border: 2px solid var(--brand-border);
+  }
+  .summary-main { flex: 1; min-width: 0; }
+  .summary-name { font-size: 18px; font-weight: 700; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .summary-name.placeholder { color: var(--faint); }
+  .summary-tag { color: var(--ink-2); margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .summary-meta { color: var(--sub); font-size: 13px; margin: 2px 0 0; }
+  .completeness { flex: none; width: 190px; }
+  .completeness-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .completeness-label strong { color: var(--ink); }
+  .bar { height: 7px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; width: 0; background: var(--brand); border-radius: 99px; transition: width .3s ease; }
+
+  /* ---------- Resume autofill ---------- */
+  .autofill { padding: 18px; margin-bottom: 16px; }
+  .autofill-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; }
+  .autofill-head h2 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .autofill-head p { margin: 2px 0 0; color: var(--sub); font-size: 13px; }
+  .new-pill { font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--brand); background: var(--brand-soft); border: 1px solid var(--brand-border); border-radius: 99px; padding: 1px 7px; }
+  .drop {
+    display: flex; align-items: center; gap: 14px;
+    border: 1.5px dashed var(--line-2); border-radius: var(--r-md);
+    padding: 16px; cursor: pointer; background: var(--surface-2);
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop:focus-visible, .drop.dragging { border-color: var(--brand); background: var(--brand-soft); outline: none; }
+  .drop-icon { flex: none; width: 40px; height: 40px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; color: var(--brand); }
+  .drop-text { flex: 1; min-width: 0; }
+  .drop-text strong { color: var(--brand); }
+  .drop-text small { display: block; color: var(--sub); font-size: 12px; margin-top: 2px; }
+  .replace-opt { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); margin-top: 10px; cursor: pointer; width: fit-content; }
+  .replace-opt input { accent-color: var(--brand); width: 15px; height: 15px; }
+
+  .progress { border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px; }
+  .progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .file-chip { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .progress-status { color: var(--sub); font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+  .bar.indeterminate > span { width: 35%; animation: slide 1.2s ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(290%); } }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--brand-border); border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result { border-radius: var(--r-md); padding: 12px 14px; border: 1px solid; margin-top: 12px; }
+  .result.ok { background: var(--success-soft); border-color: var(--success-border); }
+  .result.err { background: var(--danger-soft); border-color: var(--danger-border); }
+  .result.info { background: var(--brand-soft); border-color: var(--brand-border); }
+  .result-title { font-weight: 600; margin: 0 0 2px; }
+  .result.ok .result-title { color: var(--success); }
+  .result.err .result-title { color: var(--danger); }
+  .result p { margin: 2px 0; color: var(--ink-2); font-size: 13px; }
+  .result ul { margin: 6px 0 0; padding-left: 18px; color: var(--warn); font-size: 12.5px; }
+  .result-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: var(--r-sm); border: 1px solid transparent;
+    padding: 8px 14px; font-weight: 600; font-size: 13.5px; cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s; white-space: nowrap;
+  }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--brand-ring); }
+  .btn-primary { background: var(--brand); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--brand-hover); }
+  .btn-outline { background: var(--surface); border-color: var(--line-2); color: var(--ink-2); }
+  .btn-outline:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+  .btn-ghost { background: transparent; color: var(--brand); padding: 6px 10px; }
+  .btn-ghost:hover:not(:disabled) { background: var(--brand-soft); }
+  .btn-sm { padding: 5px 10px; font-size: 12.5px; }
+  .btn-icon { background: transparent; border: none; color: var(--sub); padding: 6px; border-radius: var(--r-sm); cursor: pointer; display: inline-grid; place-items: center; }
+  .btn-icon:hover { color: var(--danger); background: var(--danger-soft); }
+
+  /* ---------- Tabs ---------- */
+  .tabs {
+    display: flex; gap: 4px; border-bottom: 1px solid var(--line);
+    overflow-x: auto; scrollbar-width: none; margin-bottom: 16px;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 14px; font-weight: 600; color: var(--sub); cursor: pointer;
+    white-space: nowrap; display: flex; align-items: center; gap: 7px; margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+  .tab:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--brand-ring); border-radius: 6px 6px 0 0; }
+  .tab-badge { font-size: 11px; font-weight: 700; color: var(--brand); background: var(--brand-soft); border: 1px solid var(--brand-border); border-radius: 99px; padding: 0 6px; line-height: 17px; }
+  .tab-err { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
+
+  /* ---------- Sections & fields ---------- */
+  .section { padding: 18px; margin-bottom: 16px; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .section-head h3 { margin: 0; font-size: 15px; }
+  .section-head p { margin: 1px 0 0; color: var(--sub); font-size: 12.5px; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .span-2 { grid-column: span 2; }
+  .span-all { grid-column: 1 / -1; }
+  .field { min-width: 0; border: 0; padding: 0; margin: 0; }
+  .field > label, .field > legend {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 5px; padding: 0;
+  }
+  .req { color: var(--danger); }
+  .input {
+    width: 100%; background: var(--surface); border: 1px solid var(--line-2);
+    border-radius: var(--r-sm); padding: 9px 11px; font-size: 14px; min-height: 40px;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  .input::placeholder { color: var(--faint); }
+  .input:hover:not(:disabled) { border-color: var(--faint); }
+  .input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-ring); }
+  .input:disabled { background: var(--surface-2); color: var(--faint); cursor: not-allowed; }
+  textarea.input { resize: vertical; min-height: 90px; }
+  select.input { appearance: none; padding-right: 32px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2362748e' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 11px center; }
+  .input.ai-filled { background-color: var(--brand-soft); border-color: var(--brand-border); }
+  .input.invalid { border-color: var(--danger); background-color: var(--danger-soft); }
+  .input.invalid:focus { box-shadow: 0 0 0 3px rgba(200, 30, 30, .15); }
+  .hint { font-size: 12px; color: var(--sub); margin-top: 4px; min-height: 0; }
+  .err { font-size: 12px; color: var(--danger); margin-top: 4px; }
+  .err:empty { display: none; }
+  .ai-chip {
+    font-size: 10.5px; font-weight: 600; color: var(--brand); background: var(--surface);
+    border: 1px solid var(--brand-border); border-radius: 99px; padding: 0 6px; line-height: 16px;
+  }
+  .check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); cursor: pointer; min-height: 40px; }
+  .check input { accent-color: var(--brand); width: 16px; height: 16px; cursor: pointer; }
+
+  .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-md); padding: 3px; gap: 3px; flex-wrap: wrap; }
+  .seg.ai-filled { border-color: var(--brand-border); }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label { padding: 7px 16px; border-radius: 7px; cursor: pointer; font-weight: 600; color: var(--muted); font-size: 13.5px; }
+  .seg input:checked + label { background: var(--surface); color: var(--brand); box-shadow: var(--shadow); }
+  .seg input:focus-visible + label { box-shadow: 0 0 0 3px var(--brand-ring); }
+
+  .items { display: flex; flex-direction: column; gap: 12px; }
+  .item { border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px; background: var(--surface); }
+  .item.ai-item { border-color: var(--brand-border); box-shadow: inset 3px 0 0 var(--brand); }
+  .item-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .item-title { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .item-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .social-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+  .empty { border: 1.5px dashed var(--line-2); border-radius: var(--r-md); padding: 18px; text-align: center; color: var(--sub); font-size: 13px; }
+
+  /* ---------- Sticky actions ---------- */
+  .actions {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    background: rgba(255, 255, 255, .96); border-top: 1px solid var(--line);
+    backdrop-filter: blur(6px);
+  }
+  .actions-inner { max-width: 1080px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+  .actions-status { flex: 1; min-width: 0; font-size: 13px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .actions-status.dirty { color: var(--warn); font-weight: 600; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%) translateY(10px);
+    background: var(--ink); color: #fff; padding: 10px 16px; border-radius: var(--r-md);
+    font-size: 13.5px; box-shadow: var(--shadow-lg); opacity: 0; pointer-events: none;
+    transition: opacity .2s, transform .2s; z-index: 30; max-width: calc(100vw - 32px);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.error { background: var(--danger); }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 760px) {
+    .grid, .grid.cols-3 { grid-template-columns: minmax(0, 1fr); }
+    .span-2 { grid-column: auto; }
+    .summary { flex-wrap: wrap; }
+    .completeness { width: 100%; }
+    .social-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .social-row .field:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+    .page-head h1 { font-size: 19px; }
+    .logo-text { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="logo" href="/profile.html" aria-label="BONC Network profile">
+      <span class="logo-mark" aria-hidden="true">B</span>
+      <span class="logo-text">BONC <span>Network</span></span>
+    </a>
+    <a class="back-link" href="/">← Legal Intelligence</a>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-head">
+    <div>
+      <h1>My Profile</h1>
+      <p>Keep your details up to date so the right connections can find you.</p>
+    </div>
+  </div>
+
+  <!-- Profile summary -->
+  <section class="card summary" aria-label="Profile summary">
+    <div class="avatar" id="sumAvatar" aria-hidden="true">?</div>
+    <div class="summary-main">
+      <p class="summary-name" id="sumName">Your name</p>
+      <p class="summary-tag" id="sumTag"></p>
+      <p class="summary-meta" id="sumMeta"></p>
+    </div>
+    <div class="completeness">
+      <div class="completeness-label"><span>Profile completeness</span><strong id="sumPct">0%</strong></div>
+      <div class="bar" role="progressbar" aria-label="Profile completeness" aria-valuemin="0" aria-valuemax="100" id="sumBar"><span></span></div>
+    </div>
+  </section>
+
+  <!-- Resume autofill -->
+  <section class="card autofill" aria-labelledby="afTitle">
+    <div class="autofill-head">
+      <div>
+        <h2 id="afTitle">Autofill from resume <span class="new-pill">New</span></h2>
+        <p>Upload your resume and we'll fill in your profile. You can review every field before saving.</p>
+      </div>
+    </div>
+
+    <div id="afIdle">
+      <label class="drop" id="dropZone" tabindex="0" for="resumeInput">
+        <span class="drop-icon" aria-hidden="true">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/></svg>
+        </span>
+        <span class="drop-text">
+          <span>Drag your resume here or <strong>browse</strong></span>
+          <small id="dropHint">PDF, DOC or DOCX · up to 10 MB</small>
+        </span>
+      </label>
+      <input type="file" id="resumeInput" class="sr-only" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+      <label class="replace-opt">
+        <input type="checkbox" id="replaceExisting">
+        Replace fields I've already filled
+      </label>
+    </div>
+
+    <div id="afBusy" class="progress" hidden>
+      <div class="progress-row">
+        <span class="file-chip" id="busyFile">resume.pdf</span>
+        <button type="button" class="btn btn-outline btn-sm" id="cancelExtract">Cancel</button>
+      </div>
+      <div class="bar" id="busyBar"><span></span></div>
+      <div class="progress-status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="busyText">Uploading…</span></div>
+    </div>
+
+    <div id="afResult" aria-live="polite"></div>
+  </section>
+
+  <!-- Tabs -->
+  <nav class="tabs" role="tablist" aria-label="Profile sections">
+    <button class="tab" role="tab" data-tab="basic" id="tab-basic" aria-controls="panel-basic">Basic Details <span class="tab-badge" hidden></span><span class="tab-err" hidden></span></button>
+    <button class="tab" role="tab" data-tab="networking" id="tab-networking" aria-controls="panel-networking">Networking <span class="tab-badge" hidden></span><span class="tab-err" hidden></span></button>
+    <button class="tab" role="tab" data-tab="education" id="tab-education" aria-controls="panel-education">Education &amp; Experience <span class="tab-badge" hidden></span><span class="tab-err" hidden></span></button>
+    <button class="tab" role="tab" data-tab="career" id="tab-career" aria-controls="panel-career">Career Preferences <span class="tab-badge" hidden></span><span class="tab-err" hidden></span></button>
+  </nav>
+
+  <form id="profileForm" novalidate autocomplete="off">
+    <div role="tabpanel" id="panel-basic" aria-labelledby="tab-basic"></div>
+    <div role="tabpanel" id="panel-networking" aria-labelledby="tab-networking" hidden></div>
+    <div role="tabpanel" id="panel-education" aria-labelledby="tab-education" hidden></div>
+    <div role="tabpanel" id="panel-career" aria-labelledby="tab-career" hidden></div>
+  </form>
+</main>
+
+<div class="actions">
+  <div class="actions-inner">
+    <span class="actions-status" id="saveStatus">All changes saved</span>
+    <button type="button" class="btn btn-outline" id="cancelBtn">Cancel</button>
+    <button type="button" class="btn btn-primary" id="saveBtn">Save Changes</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+/* ======================================================================
+   Config — endpoints are owned by the backend team.
+   ====================================================================== */
+const CONFIG = {
+  extractUrl: '/api/profile/extract-resume',
+  saveUrl: null,                     // e.g. '/api/profile' (PUT). null → local draft.
+  maxResumeMb: 10,
+  acceptedExt: ['pdf', 'doc', 'docx'],
+  extractTimeoutMs: 5 * 60 * 1000,   // local LLM on CPU can be slow
+  draftKey: 'bonc.profile.draft.v1',
+};
+const MOCK = new URLSearchParams(location.search).has('mock');
+
+/* ======================================================================
+   Schema enums (BONCProfileExtraction)
+   ====================================================================== */
+const ENUMS = {
+  gender: ['Male', 'Female', 'Other'],
+  platform: ['LinkedIn', 'Twitter', 'Instagram', 'Facebook', 'GitHub', 'Website', 'Other'],
+  expEmployment: ['Full-time', 'Part-time', 'Contract', 'Internship'],
+  careerEmployment: ['Full-Time', 'Part-Time', 'Contract', 'Internship', 'Freelance'],
+  workMode: ['Hybrid', 'Remote', 'On-Site'],
+  mode: ['Looking for Job', 'Looking for Talent'],
+  jobCategory: [
+    'Information Technology', 'Sales & Marketing', 'Finance & Accounting', 'Human Resources',
+    'Operations & Logistics', 'Manufacturing & Production', 'Engineering', 'Healthcare & Medical',
+    'Education & Training', 'Design & Creative', 'Legal & Compliance', 'Customer Support',
+    'Business Development', 'Research & Development', 'Supply Chain',
+  ],
+};
+// Loose synonyms the extractor may emit → canonical enum value.
+const SYNONYMS = {
+  m: 'Male', f: 'Female', man: 'Male', woman: 'Female',
+  onsite: 'On-Site', office: 'On-Site', inoffice: 'On-Site', wfo: 'On-Site', wfh: 'Remote', workfromhome: 'Remote',
+  x: 'Twitter', portfolio: 'Website', blog: 'Website', personalwebsite: 'Website',
+  it: 'Information Technology', software: 'Information Technology', hr: 'Human Resources',
+  intern: 'Internship',
+  jobseeker: 'Looking for Job', hiring: 'Looking for Talent',
+};
+
+const ADDRESS_FIELDS = ['house_flat_building', 'street_area_locality', 'landmark', 'country', 'state', 'city', 'pincode'];
+const EDU_FIELDS = ['institute_name', 'degree', 'field_of_study', 'location', 'from_date', 'to_date', 'currently_studying_here', 'description'];
+const EXP_FIELDS = ['company_name', 'designation', 'employment_type', 'location', 'from_date', 'to_date', 'currently_working_here', 'description'];
+const TABS = { basic: 'basic_details', networking: 'networking', education: 'education_and_experience', career: 'career_preferences' };
+const SECTION_TAB = Object.fromEntries(Object.entries(TABS).map(([t, s]) => [s, t]));
+
+const SCALAR_PATHS = [
+  'basic_details.first_name', 'basic_details.middle_name', 'basic_details.last_name',
+  'basic_details.alternate_phone_number', 'basic_details.gender',
+  ...ADDRESS_FIELDS.map(f => 'basic_details.primary_address.' + f),
+  'networking.profession', 'networking.location', 'networking.date_of_birth', 'networking.tag_line', 'networking.about',
+  'career_preferences.mode', 'career_preferences.job_category', 'career_preferences.employment_type', 'career_preferences.work_mode',
+  'career_preferences.preferred_country', 'career_preferences.preferred_state', 'career_preferences.preferred_city',
+  'career_preferences.experience_years_min', 'career_preferences.experience_years_max',
+  'career_preferences.salary_inr_per_year_min', 'career_preferences.salary_inr_per_year_max',
+];
+
+/* ======================================================================
+   State
+   ====================================================================== */
+const emptyAddress = () => Object.fromEntries(ADDRESS_FIELDS.map(f => [f, null]));
+const blankItem = {
+  'basic_details.additional_addresses': () => ({ ...emptyAddress(), set_as_default_address: false }),
+  'networking.social_links': () => ({ platform: 'LinkedIn', url: null }),
+  'education_and_experience.education': () => ({ institute_name: null, degree: null, field_of_study: null, location: null, from_date: null, to_date: null, currently_studying_here: false, description: null }),
+  'education_and_experience.experience': () => ({ company_name: null, designation: null, employment_type: null, location: null, from_date: null, to_date: null, currently_working_here: false, description: null }),
+};
+function defaultProfile() {
+  return {
+    basic_details: { first_name: null, middle_name: null, last_name: null, alternate_phone_number: null, gender: null, primary_address: emptyAddress(), additional_addresses: [] },
+    networking: { profession: null, location: null, date_of_birth: null, tag_line: null, about: null, social_links: [] },
+    education_and_experience: { education: [], experience: [] },
+    career_preferences: {
+      mode: 'Looking for Job', job_category: null, employment_type: null, work_mode: null,
+      preferred_country: null, preferred_state: null, preferred_city: null,
+      experience_years_min: null, experience_years_max: null, salary_inr_per_year_min: null, salary_inr_per_year_max: null,
+    },
+  };
+}
+
+let state = defaultProfile();
+let saved = clone(state);
+let aiPaths = new Set();   // leaf fields filled from the resume (cleared on edit/save)
+let aiItems = new Set();   // list items added by the resume
+let errors = {};           // path → message
+let dirty = false;
+let activeTab = 'basic';
+let undoSnapshot = null;
+let xhr = null;
+
+/* ======================================================================
+   Utilities
+   ====================================================================== */
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fid(path) { return 'f-' + path.replace(/[^a-z0-9]/gi, '-'); }
+function getPath(o, path) { return path.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o); }
+function setPath(o, path, v) {
+  const ks = path.split('.'); const last = ks.pop();
+  ks.reduce((a, k) => a[k], o)[last] = v;
+}
+function isEmpty(v) { return v == null || v === '' || v === false || (Array.isArray(v) && v.length === 0); }
+function normKey(s) { return String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function same(a, b) { return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase(); }
+function formatINR(n) { return '₹' + Number(n).toLocaleString('en-IN'); }
+
+/* Dates: schema uses DD-MM-YYYY, <input type=date> uses YYYY-MM-DD. */
+function dmyToIso(d) { const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(d || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; }
+function isoToDmy(d) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; }
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+function validYmd(y, m, d) {
+  const dt = new Date(y, m - 1, d);
+  return y > 1900 && y < 2200 && dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+function toDmy(y, m, d) { return validYmd(y, m, d) ? `${String(d).padStart(2, '0')}-${String(m).padStart(2, '0')}-${y}` : null; }
+function normalizeDate(v) {
+  if (v == null || v === '') return null;
+  const s = String(v).trim();
+  let m;
+  if ((m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(s))) return toDmy(+m[3], +m[2], +m[1]);
+  if ((m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/.exec(s))) return toDmy(+m[1], +m[2], +m[3]);
+  if ((m = /^(\d{1,2})[-/.](\d{4})$/.exec(s))) return toDmy(+m[2], +m[1], 1);
+  if ((m = /^(\d{4})[-/.](\d{1,2})$/.exec(s))) return toDmy(+m[1], +m[2], 1);
+  if ((m = /^(\d{4})$/.exec(s))) return toDmy(+m[1], 1, 1);
+  if ((m = /^(?:(\d{1,2})\s+)?([a-z]{3,9})\.?,?\s+(\d{4})$/i.exec(s))) {
+    const mi = MONTHS.indexOf(m[2].slice(0, 3).toLowerCase());
+    if (mi >= 0) return toDmy(+m[3], mi + 1, m[1] ? +m[1] : 1);
+  }
+  return null;
+}
+function matchEnum(v, options) {
+  if (v == null || v === '') return null;
+  const k = normKey(v);
+  const direct = options.find(o => normKey(o) === k);
+  if (direct) return direct;
+  const syn = SYNONYMS[k];
+  return syn && options.includes(syn) ? syn : null;
+}
+function platformFromUrl(url) {
+  const u = String(url).toLowerCase();
+  if (u.includes('linkedin.')) return 'LinkedIn';
+  if (/(^|[/.])(twitter|x)\.com/.test(u)) return 'Twitter';
+  if (u.includes('instagram.')) return 'Instagram';
+  if (u.includes('facebook.') || u.includes('fb.com')) return 'Facebook';
+  if (u.includes('github.')) return 'GitHub';
+  return 'Website';
+}
+
+/* ======================================================================
+   Normalize untrusted extraction output into the schema shape
+   ====================================================================== */
+function normalizeProfile(raw) {
+  const warn = [];
+  const o = defaultProfile();
+  const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  const arr = v => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object') : []);
+  const str = (v, max) => {
+    if (typeof v === 'number') v = String(v);
+    if (typeof v !== 'string') return null;
+    v = v.trim();
+    return v ? (max ? v.slice(0, max) : v) : null;
+  };
+  const en = (v, options, label) => {
+    const r = matchEnum(v, options);
+    if (r == null && str(v)) warn.push(`${label}: “${str(v)}” isn't an available option. Please pick one.`);
+    return r;
+  };
+  const date = (v, label) => {
+    const r = normalizeDate(v);
+    if (r == null && str(v)) warn.push(`${label}: couldn't read the date “${str(v)}”.`);
+    return r;
+  };
+  const num = (v, int) => {
+    if (typeof v === 'string') v = v.replace(/[, ₹]/g, '');
+    const n = Number(v);
+    if (v === null || v === '' || !Number.isFinite(n) || n < 0) return null;
+    return int ? Math.round(n) : Math.round(n * 10) / 10;
+  };
+  const addr = a => {
+    a = obj(a);
+    return {
+      house_flat_building: str(a.house_flat_building, 120), street_area_locality: str(a.street_area_locality, 60),
+      landmark: str(a.landmark), country: str(a.country), state: str(a.state), city: str(a.city), pincode: str(a.pincode),
+    };
+  };
+  const hasAny = (x, fields) => fields.some(f => !isEmpty(x[f]));
+
+  const b = obj(raw.basic_details), n = obj(raw.networking), ee = obj(raw.education_and_experience), c = obj(raw.career_preferences);
+
+  const B = o.basic_details;
+  B.first_name = str(b.first_name); B.middle_name = str(b.middle_name); B.last_name = str(b.last_name);
+  B.alternate_phone_number = str(b.alternate_phone_number);
+  B.gender = en(b.gender, ENUMS.gender, 'Gender');
+  B.primary_address = addr(b.primary_address);
+  let seenDefault = false;
+  B.additional_addresses = arr(b.additional_addresses)
+    .map(a => ({ ...addr(a), set_as_default_address: a.set_as_default_address === true }))
+    .filter(a => hasAny(a, ADDRESS_FIELDS)).slice(0, 10)
+    .map(a => { if (a.set_as_default_address) { if (seenDefault) a.set_as_default_address = false; seenDefault = true; } return a; });
+
+  const N = o.networking;
+  N.profession = str(n.profession); N.location = str(n.location);
+  N.date_of_birth = date(n.date_of_birth, 'Date of birth');
+  N.tag_line = str(n.tag_line); N.about = str(n.about);
+  const seenUrls = new Set();
+  N.social_links = arr(n.social_links).map(s => {
+    const url = str(s.url);
+    return url ? { platform: matchEnum(s.platform, ENUMS.platform) || platformFromUrl(url), url } : null;
+  }).filter(s => s && !seenUrls.has(normKey(s.url)) && seenUrls.add(normKey(s.url)));
+
+  const period = (x, flag, label) => {
+    const r = { from_date: date(x.from_date, label + ' start date'), to_date: date(x.to_date, label + ' end date') };
+    r[flag] = x[flag] === true;
+    if (r[flag]) r.to_date = null;
+    return r;
+  };
+  o.education_and_experience.education = arr(ee.education).map(e => ({
+    institute_name: str(e.institute_name), degree: str(e.degree), field_of_study: str(e.field_of_study), location: str(e.location),
+    ...period(e, 'currently_studying_here', 'Education'), description: str(e.description),
+  })).filter(e => e.institute_name || e.degree);
+  o.education_and_experience.experience = arr(ee.experience).map(e => ({
+    company_name: str(e.company_name), designation: str(e.designation),
+    employment_type: en(e.employment_type, ENUMS.expEmployment, 'Experience employment type'), location: str(e.location),
+    ...period(e, 'currently_working_here', 'Experience'), description: str(e.description),
+  })).filter(e => e.company_name || e.designation);
+  // keep the key order the UI expects
+  o.education_and_experience.education = o.education_and_experience.education.map(e => pick(e, EDU_FIELDS));
+  o.education_and_experience.experience = o.education_and_experience.experience.map(e => pick(e, EXP_FIELDS));
+
+  const C = o.career_preferences;
+  C.mode = matchEnum(c.mode, ENUMS.mode) || 'Looking for Job';
+  C.job_category = en(c.job_category, ENUMS.jobCategory, 'Job category');
+  C.employment_type = en(c.employment_type, ENUMS.careerEmployment, 'Preferred employment type');
+  C.work_mode = en(c.work_mode, ENUMS.workMode, 'Work mode');
+  C.preferred_country = str(c.preferred_country); C.preferred_state = str(c.preferred_state); C.preferred_city = str(c.preferred_city);
+  C.experience_years_min = num(c.experience_years_min); C.experience_years_max = num(c.experience_years_max);
+  C.salary_inr_per_year_min = num(c.salary_inr_per_year_min, true); C.salary_inr_per_year_max = num(c.salary_inr_per_year_max, true);
+
+  return { data: o, warnings: warn };
+}
+function pick(o, keys) { return Object.fromEntries(keys.map(k => [k, o[k] ?? null])); }
+
+/* ======================================================================
+   Merge extracted data into the form
+   ====================================================================== */
+const LISTS = [
+  ['basic_details.additional_addresses', a => a.house_flat_building || a.pincode ? normKey(a.house_flat_building) + '|' + normKey(a.pincode) + '|' + normKey(a.city) : null, [...ADDRESS_FIELDS, 'set_as_default_address'], 10],
+  ['networking.social_links', s => (s.url ? normKey(String(s.url).replace(/^https?:\/\/(www\.)?/i, '').replace(/\/+$/, '')) : null), ['platform', 'url']],
+  ['education_and_experience.education', e => (e.institute_name ? normKey(e.institute_name) + '|' + normKey(e.degree) : null), EDU_FIELDS],
+  ['education_and_experience.experience', e => (e.company_name ? normKey(e.company_name) + '|' + normKey(e.designation) : null), EXP_FIELDS],
+];
+
+function applyExtraction(raw, { replace = false } = {}) {
+  const { data: x, warnings } = normalizeProfile(raw || {});
+  let filled = 0, kept = 0;
+  const perSection = {};
+  const put = (path, v, fresh = false) => {
+    if (isEmpty(v)) return;
+    const cur = getPath(state, path);
+    if (same(cur, v)) return;
+    if (!fresh && !isEmpty(cur) && !replace) { kept++; return; }
+    setPath(state, path, v);
+    aiPaths.add(path);
+    delete errors[path];
+    filled++;
+    const sec = path.split('.')[0];
+    perSection[sec] = (perSection[sec] || 0) + 1;
+  };
+
+  for (const p of SCALAR_PATHS) {
+    if (p === 'career_preferences.mode' && !replace) continue; // a resume rarely means "Looking for Talent"
+    put(p, getPath(x, p));
+  }
+  for (const [ap, keyFn, fields, max] of LISTS) {
+    const list = getPath(state, ap);
+    for (const item of getPath(x, ap)) {
+      const k = keyFn(item);
+      let idx = k ? list.findIndex(e => keyFn(e) === k) : -1;
+      const fresh = idx === -1; // new rows only hold UI defaults, so extracted values always win
+      if (fresh) {
+        if (max && list.length >= max) { warnings.push(`Only ${max} additional addresses are allowed; some were skipped.`); continue; }
+        list.push(blankItem[ap]());
+        idx = list.length - 1;
+        aiItems.add(`${ap}.${idx}`);
+      }
+      for (const f of fields) put(`${ap}.${idx}.${f}`, item[f], fresh);
+    }
+  }
+  fixups();
+  return { filled, kept, warnings: [...new Set(warnings)], perSection };
+}
+
+// Keep cross-field invariants after any bulk change.
+function fixups() {
+  for (const [list, flag] of [['education_and_experience.education', 'currently_studying_here'], ['education_and_experience.experience', 'currently_working_here']]) {
+    getPath(state, list).forEach(e => { if (e[flag]) e.to_date = null; });
+  }
+  let seen = false;
+  state.basic_details.additional_addresses.forEach(a => {
+    if (a.set_as_default_address) { if (seen) a.set_as_default_address = false; seen = true; }
+  });
+}
+
+/* ======================================================================
+   Rendering
+   ====================================================================== */
+const AI_CHIP = '<span class="ai-chip" title="Filled from your resume. Please review.">✦ From resume</span>';
+
+function F(path, label, o = {}) {
+  const id = fid(path);
+  const v = getPath(state, path);
+  const ai = aiPaths.has(path);
+  const err = errors[path];
+  const cls = `input${ai ? ' ai-filled' : ''}${err ? ' invalid' : ''}`;
+  const common = `id="${id}" name="${esc(path)}" data-path="${esc(path)}" class="${cls}"${o.required ? ' aria-required="true"' : ''}${o.disabled ? ' disabled' : ''}${err ? ` aria-invalid="true"` : ''} aria-describedby="${id}-err${o.hint !== undefined ? ` ${id}-hint` : ''}"`;
+  let control;
+  switch (o.type) {
+    case 'select':
+      control = `<select ${common}><option value="">${esc(o.placeholder || 'Select')}</option>${o.options.map(op => `<option${op === v ? ' selected' : ''}>${esc(op)}</option>`).join('')}</select>`;
+      break;
+    case 'textarea':
+      control = `<textarea ${common} rows="${o.rows || 4}" placeholder="${esc(o.placeholder || '')}"${o.maxLength ? ` maxlength="${o.maxLength}"` : ''}>${esc(v ?? '')}</textarea>`;
+      break;
+    case 'date':
+      control = `<input type="date" ${common} value="${esc(dmyToIso(v))}"${o.max ? ` max="${o.max}"` : ''}>`;
+      break;
+    case 'number':
+      control = `<input type="number" inputmode="${o.int ? 'numeric' : 'decimal'}" ${common} value="${v ?? ''}" min="0" step="${o.step || 1}"${o.int ? ' data-int="1"' : ''} placeholder="${esc(o.placeholder || '')}">`;
+      break;
+    default:
+      control = `<input type="${o.type || 'text'}" ${common} value="${esc(v ?? '')}" placeholder="${esc(o.placeholder || '')}"${o.maxLength ? ` maxlength="${o.maxLength}"` : ''}${o.inputmode ? ` inputmode="${o.inputmode}"` : ''}>`;
+  }
+  return `<div class="field${o.span ? ' span-2' : ''}">
+    <label for="${id}">${esc(label)}${o.required ? ' <span class="req" aria-hidden="true">*</span>' : ''}${ai ? AI_CHIP : ''}</label>
+    ${control}
+    ${o.hint !== undefined ? `<div class="hint" id="${id}-hint">${o.hint}</div>` : ''}
+    <div class="err" id="${id}-err">${err ? esc(err) : ''}</div>
+  </div>`;
+}
+function Check(path, label) {
+  const id = fid(path);
+  const ai = aiPaths.has(path);
+  return `<label class="check" for="${id}"><input type="checkbox" id="${id}" data-path="${esc(path)}"${getPath(state, path) ? ' checked' : ''}><span>${esc(label)}</span>${ai ? AI_CHIP : ''}</label>`;
+}
+function Seg(path, label, options) {
+  const v = getPath(state, path);
+  const ai = aiPaths.has(path);
+  return `<fieldset class="field span-all"><legend>${esc(label)}${ai ? AI_CHIP : ''}</legend>
+    <div class="seg${ai ? ' ai-filled' : ''}">${options.map((op, i) => {
+      const id = `${fid(path)}-${i}`;
+      return `<input type="radio" name="${fid(path)}" id="${id}" value="${esc(op)}" data-path="${esc(path)}"${op === v ? ' checked' : ''}><label for="${id}">${esc(op)}</label>`;
+    }).join('')}</div></fieldset>`;
+}
+function addressFields(base) {
+  return `
+    ${F(base + '.house_flat_building', 'House / Flat / Building', { placeholder: 'e.g. Flat 402, Sunrise Apartments', maxLength: 120, span: true })}
+    ${F(base + '.street_area_locality', 'Street / Area / Locality', { placeholder: 'e.g. MG Road, Indiranagar', maxLength: 60 })}
+    ${F(base + '.landmark', 'Landmark', { placeholder: 'e.g. Near Metro Station' })}
+    ${F(base + '.country', 'Country', { placeholder: 'Enter country' })}
+    ${F(base + '.state', 'State', { placeholder: 'Enter state' })}
+    ${F(base + '.city', 'City', { placeholder: 'Enter city' })}
+    ${F(base + '.pincode', 'Pincode', { placeholder: 'Enter your pincode', inputmode: 'numeric', maxLength: 10 })}`;
+}
+function itemCard(path, title, body) {
+  const ai = aiItems.has(path);
+  return `<div class="item${ai ? ' ai-item' : ''}">
+    <div class="item-head">
+      <div class="item-title"><span>${esc(title)}</span>${ai ? AI_CHIP : ''}</div>
+      <button type="button" class="btn-icon" data-action="remove" data-path="${esc(path)}" aria-label="Remove ${esc(title)}" title="Remove">${TRASH}</button>
+    </div>
+    <div class="grid">${body}</div>
+  </div>`;
+}
+const TRASH = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>';
+const PLUS = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+function sectionHead(title, sub, action) {
+  return `<div class="section-head"><div><h3>${esc(title)}</h3>${sub ? `<p>${esc(sub)}</p>` : ''}</div>${action || ''}</div>`;
+}
+function addBtn(list, label, disabled) {
+  return `<button type="button" class="btn btn-ghost btn-sm" data-action="add" data-list="${list}"${disabled ? ' disabled' : ''}>${PLUS} ${esc(label)}</button>`;
+}
+const today = () => new Date().toISOString().slice(0, 10);
+
+function renderBasic() {
+  const B = state.basic_details;
+  const addrs = B.additional_addresses;
+  return `
+  <section class="card section">
+    ${sectionHead('Personal Information')}
+    <div class="grid cols-3">
+      ${F('basic_details.first_name', 'First Name', { required: true, placeholder: 'First name' })}
+      ${F('basic_details.middle_name', 'Middle Name', { placeholder: 'Middle name' })}
+      ${F('basic_details.last_name', 'Last Name', { required: true, placeholder: 'Last name' })}
+      ${F('basic_details.alternate_phone_number', 'Alternate Phone Number', { type: 'tel', placeholder: 'Enter alternate phone number', inputmode: 'tel' })}
+      ${F('basic_details.gender', 'Gender', { type: 'select', options: ENUMS.gender, placeholder: 'Select gender' })}
+    </div>
+  </section>
+  <section class="card section">
+    ${sectionHead('Primary Address')}
+    <div class="grid">${addressFields('basic_details.primary_address')}</div>
+  </section>
+  <section class="card section">
+    ${sectionHead('Additional Addresses', `${addrs.length} of 10 added`, addBtn('basic_details.additional_addresses', 'Add Address', addrs.length >= 10))}
+    <div class="items">
+      ${addrs.length ? addrs.map((a, i) => {
+        const p = `basic_details.additional_addresses.${i}`;
+        return itemCard(p, `Address ${i + 1}${a.city ? ' · ' + a.city : ''}`,
+          addressFields(p) + `<div class="field span-2">${Check(p + '.set_as_default_address', 'Set as default address')}</div>`);
+      }).join('') : '<div class="empty">No additional addresses yet.</div>'}
+    </div>
+  </section>`;
+}
+
+function renderNetworking() {
+  const links = state.networking.social_links;
+  return `
+  <section class="card section">
+    ${sectionHead('Professional Identity', 'This is what people see first when they find you on BONC.')}
+    <div class="grid">
+      ${F('networking.profession', 'Profession', { placeholder: 'e.g. Software Engineer' })}
+      ${F('networking.location', 'Location', { placeholder: 'e.g. Bengaluru, India' })}
+      ${F('networking.date_of_birth', 'Date of Birth', { type: 'date', max: today() })}
+      <div></div>
+      ${F('networking.tag_line', 'Tag Line', { placeholder: 'e.g. Building scalable fintech products', span: true, maxLength: 160 })}
+      ${F('networking.about', 'About', { type: 'textarea', rows: 5, placeholder: 'Tell people about your work, expertise and what you are looking for…', span: true, maxLength: 2000,
+        hint: `<span data-count-for="networking.about">${(state.networking.about || '').length}</span> / 2000` })}
+    </div>
+  </section>
+  <section class="card section">
+    ${sectionHead('Social Links', null, addBtn('networking.social_links', 'Add Link'))}
+    <div class="items">
+      ${links.length ? links.map((s, i) => {
+        const p = `networking.social_links.${i}`;
+        const ai = aiItems.has(p);
+        return `<div class="social-row">
+          ${F(p + '.platform', 'Platform', { type: 'select', options: ENUMS.platform, placeholder: 'Select platform', required: true })}
+          ${F(p + '.url', 'URL', { type: 'url', placeholder: 'https://', required: true, inputmode: 'url' })}
+          <button type="button" class="btn-icon" style="margin-top:27px" data-action="remove" data-path="${p}" aria-label="Remove link ${i + 1}" title="Remove">${TRASH}</button>
+        </div>`;
+      }).join('') : '<div class="empty">No social links yet.</div>'}
+    </div>
+  </section>`;
+}
+
+function periodFields(p, flag, flagLabel) {
+  const current = getPath(state, `${p}.${flag}`);
+  return `
+    ${F(p + '.from_date', 'From', { type: 'date', max: today() })}
+    ${F(p + '.to_date', 'To', { type: 'date', disabled: current, hint: current ? 'Present' : undefined })}
+    <div class="field span-2">${Check(`${p}.${flag}`, flagLabel)}</div>`;
+}
+function renderEducation() {
+  const ed = state.education_and_experience.education;
+  const ex = state.education_and_experience.experience;
+  return `
+  <section class="card section">
+    ${sectionHead('Education', null, addBtn('education_and_experience.education', 'Add Education'))}
+    <div class="items">
+      ${ed.length ? ed.map((e, i) => {
+        const p = `education_and_experience.education.${i}`;
+        const title = [e.degree, e.institute_name].filter(Boolean).join(' · ') || `Education ${i + 1}`;
+        return itemCard(p, title, `
+          ${F(p + '.institute_name', 'Institute Name', { required: true, placeholder: 'e.g. IIT Delhi' })}
+          ${F(p + '.degree', 'Degree', { required: true, placeholder: 'e.g. B.Tech' })}
+          ${F(p + '.field_of_study', 'Field of Study', { placeholder: 'e.g. Computer Science' })}
+          ${F(p + '.location', 'Location', { placeholder: 'e.g. New Delhi' })}
+          ${periodFields(p, 'currently_studying_here', 'I am currently studying here')}
+          ${F(p + '.description', 'Description', { type: 'textarea', rows: 3, placeholder: 'Achievements, coursework, activities…', span: true })}`);
+      }).join('') : '<div class="empty">No education added yet.</div>'}
+    </div>
+  </section>
+  <section class="card section">
+    ${sectionHead('Experience', null, addBtn('education_and_experience.experience', 'Add Experience'))}
+    <div class="items">
+      ${ex.length ? ex.map((e, i) => {
+        const p = `education_and_experience.experience.${i}`;
+        const title = [e.designation, e.company_name].filter(Boolean).join(' · ') || `Experience ${i + 1}`;
+        return itemCard(p, title, `
+          ${F(p + '.company_name', 'Company Name', { required: true, placeholder: 'e.g. Costipro Technologies' })}
+          ${F(p + '.designation', 'Designation', { required: true, placeholder: 'e.g. Product Manager' })}
+          ${F(p + '.employment_type', 'Employment Type', { type: 'select', options: ENUMS.expEmployment, placeholder: 'Select employment type' })}
+          ${F(p + '.location', 'Location', { placeholder: 'e.g. Gurgaon' })}
+          ${periodFields(p, 'currently_working_here', 'I am currently working here')}
+          ${F(p + '.description', 'Description', { type: 'textarea', rows: 3, placeholder: 'Responsibilities, impact, tools…', span: true })}`);
+      }).join('') : '<div class="empty">No experience added yet.</div>'}
+    </div>
+  </section>`;
+}
+
+function salaryHint(path) {
+  const v = getPath(state, path);
+  return v != null && v !== '' ? `${formatINR(v)} per year` : 'Per year, in INR';
+}
+function renderCareer() {
+  return `
+  <section class="card section">
+    ${sectionHead('I am', 'Choose how you want to use BONC Careers.')}
+    <div class="grid">${Seg('career_preferences.mode', 'Mode', ENUMS.mode)}</div>
+  </section>
+  <section class="card section">
+    ${sectionHead('Job Preferences')}
+    <div class="grid">
+      ${F('career_preferences.job_category', 'Job Category', { type: 'select', options: ENUMS.jobCategory, placeholder: 'Select job category', required: true })}
+      ${F('career_preferences.employment_type', 'Employment Type', { type: 'select', options: ENUMS.careerEmployment, placeholder: 'Select employment type' })}
+      ${F('career_preferences.work_mode', 'Work Mode', { type: 'select', options: ENUMS.workMode, placeholder: 'Select work mode' })}
+      <div></div>
+    </div>
+  </section>
+  <section class="card section">
+    ${sectionHead('Preferred Location')}
+    <div class="grid cols-3">
+      ${F('career_preferences.preferred_country', 'Country', { placeholder: 'Enter country' })}
+      ${F('career_preferences.preferred_state', 'State', { placeholder: 'Enter state' })}
+      ${F('career_preferences.preferred_city', 'City', { placeholder: 'Enter city' })}
+    </div>
+  </section>
+  <section class="card section">
+    ${sectionHead('Experience & Salary')}
+    <div class="grid">
+      ${F('career_preferences.experience_years_min', 'Min Experience (years)', { type: 'number', step: 0.5, placeholder: 'e.g. 2' })}
+      ${F('career_preferences.experience_years_max', 'Max Experience (years)', { type: 'number', step: 0.5, placeholder: 'e.g. 5' })}
+      ${F('career_preferences.salary_inr_per_year_min', 'Min Salary (INR / year)', { type: 'number', int: true, step: 10000, placeholder: 'e.g. 600000', hint: salaryHint('career_preferences.salary_inr_per_year_min') })}
+      ${F('career_preferences.salary_inr_per_year_max', 'Max Salary (INR / year)', { type: 'number', int: true, step: 10000, placeholder: 'e.g. 1200000', hint: salaryHint('career_preferences.salary_inr_per_year_max') })}
+    </div>
+  </section>`;
+}
+
+const RENDERERS = { basic: renderBasic, networking: renderNetworking, education: renderEducation, career: renderCareer };
+function renderForms() {
+  for (const [tab, fn] of Object.entries(RENDERERS)) document.getElementById('panel-' + tab).innerHTML = fn();
+  updateChrome();
+}
+
+/* ---------- Header, badges, status ---------- */
+function updateSummary() {
+  const B = state.basic_details, N = state.networking;
+  const name = [B.first_name, B.middle_name, B.last_name].filter(Boolean).join(' ');
+  const nameEl = document.getElementById('sumName');
+  nameEl.textContent = name || 'Your name';
+  nameEl.classList.toggle('placeholder', !name);
+  document.getElementById('sumAvatar').textContent =
+    (((B.first_name || '')[0] || '') + ((B.last_name || '')[0] || '')).toUpperCase() || '?';
+  document.getElementById('sumTag').textContent = N.tag_line || '';
+  document.getElementById('sumMeta').textContent = [N.profession, N.location].filter(Boolean).join(' · ');
+
+  const checks = [
+    B.first_name, B.last_name, B.gender, B.alternate_phone_number, B.primary_address.city, B.primary_address.pincode,
+    N.profession, N.location, N.date_of_birth, N.tag_line, N.about, N.social_links.length,
+    state.education_and_experience.education.length, state.education_and_experience.experience.length,
+    state.career_preferences.job_category, state.career_preferences.work_mode, state.career_preferences.employment_type,
+  ];
+  const pct = Math.round(100 * checks.filter(v => !isEmpty(v) && v !== 0).length / checks.length);
+  document.getElementById('sumPct').textContent = pct + '%';
+  const bar = document.getElementById('sumBar');
+  bar.setAttribute('aria-valuenow', pct);
+  bar.firstElementChild.style.width = pct + '%';
+}
+function updateBadges() {
+  for (const [tab, sec] of Object.entries(TABS)) {
+    const btn = document.getElementById('tab-' + tab);
+    const n = [...aiPaths].filter(p => p.startsWith(sec + '.')).length;
+    const badge = btn.querySelector('.tab-badge');
+    badge.hidden = n === 0;
+    badge.textContent = n;
+    badge.title = `${n} field${n === 1 ? '' : 's'} filled from your resume`;
+    btn.querySelector('.tab-err').hidden = !Object.keys(errors).some(p => p.startsWith(sec + '.'));
+  }
+}
+function updateStatus() {
+  const el = document.getElementById('saveStatus');
+  const pendingReview = aiPaths.size;
+  el.classList.toggle('dirty', dirty);
+  el.textContent = !dirty ? 'All changes saved'
+    : pendingReview ? `Unsaved changes · ${pendingReview} field${pendingReview === 1 ? '' : 's'} from resume to review`
+    : 'Unsaved changes';
+}
+function updateChrome() { updateSummary(); updateBadges(); updateStatus(); }
+function markDirty() { dirty = true; updateStatus(); }
+
+/* ---------- Tabs ---------- */
+function switchTab(tab, { focus = false } = {}) {
+  if (!TABS[tab]) tab = 'basic';
+  activeTab = tab;
+  for (const t of Object.keys(TABS)) {
+    const btn = document.getElementById('tab-' + t);
+    const on = t === tab;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on);
+    btn.tabIndex = on ? 0 : -1;
+    document.getElementById('panel-' + t).hidden = !on;
+  }
+  const url = new URL(location.href);
+  url.searchParams.set('tab', tab);
+  history.replaceState(null, '', url);
+  if (focus) document.getElementById('tab-' + tab).focus();
+}
+
+/* ======================================================================
+   Form events
+   ====================================================================== */
+const form = document.getElementById('profileForm');
+
+function onFieldInput(e) {
+  const el = e.target;
+  const path = el.dataset.path;
+  if (!path) return;
+  let v;
+  if (el.type === 'checkbox') v = el.checked;
+  else if (el.type === 'radio') { if (!el.checked) return; v = el.value; }
+  else if (el.type === 'date') v = el.value ? isoToDmy(el.value) : null;
+  else if (el.type === 'number') v = el.value === '' || !Number.isFinite(+el.value) ? null : (el.dataset.int ? Math.round(+el.value) : +el.value);
+  else v = el.value.trim() === '' ? null : el.value;
+  if (getPath(state, path) === v && e.type === 'change') return;
+  setPath(state, path, v);
+
+  // clear "from resume" + error markers for this field
+  aiPaths.delete(path);
+  el.classList.remove('ai-filled', 'invalid');
+  el.removeAttribute('aria-invalid');
+  el.closest('.seg')?.classList.remove('ai-filled');
+  el.closest('.field, .check')?.querySelector('.ai-chip')?.remove();
+  if (errors[path]) { delete errors[path]; const er = document.getElementById(fid(path) + '-err'); if (er) er.textContent = ''; }
+
+  const counter = document.querySelector(`[data-count-for="${CSS.escape(path)}"]`);
+  if (counter) counter.textContent = (v || '').length;
+  if (path.includes('salary_inr')) { const h = document.getElementById(fid(path) + '-hint'); if (h) h.textContent = salaryHint(path); }
+
+  markDirty();
+  if (el.type === 'checkbox') {
+    if (v && path.endsWith('.set_as_default_address')) {
+      state.basic_details.additional_addresses.forEach((a, i) => {
+        if (`basic_details.additional_addresses.${i}.set_as_default_address` !== path) a.set_as_default_address = false;
+      });
+    }
+    if (v && /currently_(working|studying)_here$/.test(path)) setPath(state, path.replace(/currently_\w+$/, 'to_date'), null);
+    rerenderKeepFocus(el.id);
+  } else {
+    updateChrome();
+  }
+}
+form.addEventListener('input', onFieldInput);
+form.addEventListener('change', onFieldInput);
+form.addEventListener('submit', e => { e.preventDefault(); save(); });
+
+function rerenderKeepFocus(id) {
+  renderForms();
+  if (id) document.getElementById(id)?.focus({ preventScroll: true });
+}
+
+// Shift indices of path-keyed markers after an item is removed from a list.
+function reindex(set, listPath, removed) {
+  const prefix = listPath + '.';
+  const out = new Set();
+  for (const p of set) {
+    if (!p.startsWith(prefix)) { out.add(p); continue; }
+    const rest = p.slice(prefix.length).split('.');
+    const i = +rest[0];
+    if (i === removed) continue;
+    rest[0] = i > removed ? i - 1 : i;
+    out.add(prefix + rest.join('.'));
+  }
+  return out;
+}
+
+form.addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  if (btn.dataset.action === 'add') {
+    const list = btn.dataset.list;
+    const arr = getPath(state, list);
+    arr.push(blankItem[list]());
+    markDirty();
+    renderForms();
+    const first = document.querySelector(`[data-path^="${CSS.escape(`${list}.${arr.length - 1}.`)}"]:not(select)`) ||
+                  document.querySelector(`[data-path^="${CSS.escape(`${list}.${arr.length - 1}.`)}"]`);
+    first?.focus();
+  } else if (btn.dataset.action === 'remove') {
+    const path = btn.dataset.path;
+    const cut = path.lastIndexOf('.');
+    const list = path.slice(0, cut), idx = +path.slice(cut + 1);
+    getPath(state, list).splice(idx, 1);
+    aiPaths = reindex(aiPaths, list, idx);
+    aiItems = reindex(aiItems, list, idx);
+    errors = {}; // indices moved; re-validated on next save
+    markDirty();
+    renderForms();
+  }
+});
+
+document.querySelector('.tabs').addEventListener('click', e => {
+  const t = e.target.closest('.tab');
+  if (t) switchTab(t.dataset.tab);
+});
+document.querySelector('.tabs').addEventListener('keydown', e => {
+  const order = Object.keys(TABS);
+  const i = order.indexOf(activeTab);
+  if (e.key === 'ArrowRight') switchTab(order[(i + 1) % order.length], { focus: true });
+  else if (e.key === 'ArrowLeft') switchTab(order[(i + order.length - 1) % order.length], { focus: true });
+  else return;
+  e.preventDefault();
+});
+
+let toastTimer = null;
+function toast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('error', isError);
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+/* ======================================================================
+   Validation & save
+   ====================================================================== */
+function validate() {
+  const errs = {};
+  const need = (p, msg) => { if (isEmpty(getPath(state, p))) errs[p] = msg; };
+  const before = (a, b, msg, at) => {
+    const x = dmyToIso(getPath(state, a)), y = dmyToIso(getPath(state, b));
+    if (x && y && x > y) errs[at || b] = msg;
+  };
+  need('basic_details.first_name', 'First name is required.');
+  need('basic_details.last_name', 'Last name is required.');
+  const phone = state.basic_details.alternate_phone_number;
+  if (phone && !/^\+?[\d\s()-]{7,20}$/.test(phone)) errs['basic_details.alternate_phone_number'] = 'Enter a valid phone number.';
+  const pin = (p) => { const v = getPath(state, p); if (v && !/^[A-Za-z0-9 -]{3,10}$/.test(v)) errs[p] = 'Enter a valid pincode.'; };
+  pin('basic_details.primary_address.pincode');
+  state.basic_details.additional_addresses.forEach((_, i) => pin(`basic_details.additional_addresses.${i}.pincode`));
+
+  const dob = dmyToIso(state.networking.date_of_birth);
+  if (dob && dob > today()) errs['networking.date_of_birth'] = 'Date of birth cannot be in the future.';
+  state.networking.social_links.forEach((s, i) => {
+    const p = `networking.social_links.${i}`;
+    need(p + '.platform', 'Choose a platform.');
+    if (!s.url) errs[p + '.url'] = 'Enter a URL.';
+    else if (!/^(https?:\/\/)?[^\s/$.?#]+\.[^\s]+$/i.test(s.url)) errs[p + '.url'] = 'Enter a valid URL.';
+  });
+
+  state.education_and_experience.education.forEach((_, i) => {
+    const p = `education_and_experience.education.${i}`;
+    need(p + '.institute_name', 'Institute name is required.');
+    need(p + '.degree', 'Degree is required.');
+    before(p + '.from_date', p + '.to_date', 'End date must be after the start date.');
+  });
+  state.education_and_experience.experience.forEach((_, i) => {
+    const p = `education_and_experience.experience.${i}`;
+    need(p + '.company_name', 'Company name is required.');
+    need(p + '.designation', 'Designation is required.');
+    before(p + '.from_date', p + '.to_date', 'End date must be after the start date.');
+  });
+
+  const C = state.career_preferences;
+  need('career_preferences.job_category', 'Choose a job category.');
+  if (C.experience_years_min != null && C.experience_years_max != null && C.experience_years_min > C.experience_years_max)
+    errs['career_preferences.experience_years_max'] = 'Max experience must be at least the minimum.';
+  if (C.salary_inr_per_year_min != null && C.salary_inr_per_year_max != null && C.salary_inr_per_year_min > C.salary_inr_per_year_max)
+    errs['career_preferences.salary_inr_per_year_max'] = 'Max salary must be at least the minimum.';
+  return errs;
+}
+
+// Schema-shaped payload: trimmed strings, explicit nulls, booleans for flags.
+function getData() {
+  const out = clone(state);
+  const walk = o => {
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      if (typeof v === 'string') o[k] = v.trim() || null;
+      else if (v && typeof v === 'object') walk(v);
+    }
+  };
+  walk(out);
+  out.basic_details.first_name ??= '';
+  out.basic_details.last_name ??= '';
+  out.career_preferences.job_category ??= '';
+  for (const e of out.education_and_experience.education) { e.institute_name ??= ''; e.degree ??= ''; e.currently_studying_here = !!e.currently_studying_here; }
+  for (const e of out.education_and_experience.experience) { e.company_name ??= ''; e.designation ??= ''; e.currently_working_here = !!e.currently_working_here; }
+  for (const a of out.basic_details.additional_addresses) a.set_as_default_address = !!a.set_as_default_address;
+  return out;
+}
+
+async function save() {
+  errors = validate();
+  renderForms();
+  const bad = Object.keys(errors);
+  if (bad.length) {
+    switchTab(SECTION_TAB[bad[0].split('.')[0]]);
+    const el = document.getElementById(fid(bad[0]));
+    el?.focus();
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    toast(`Please fix ${bad.length} field${bad.length === 1 ? '' : 's'} before saving.`, true);
+    return;
+  }
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const payload = getData();
+    if (CONFIG.saveUrl) {
+      const r = await fetch(CONFIG.saveUrl, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!r.ok) throw new Error(await responseError(r.status, await r.text()));
+    } else {
+      try { localStorage.setItem(CONFIG.draftKey, JSON.stringify(payload)); } catch { /* storage unavailable */ }
+    }
+    saved = clone(state);
+    aiPaths.clear(); aiItems.clear();
+    dirty = false;
+    undoSnapshot = null;
+    renderForms();
+    renderResult(null);
+    toast(CONFIG.saveUrl ? 'Profile saved' : 'Profile saved on this device');
+  } catch (err) {
+    toast(err.message || 'Could not save your profile.', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
+  }
+}
+
+document.getElementById('saveBtn').addEventListener('click', save);
+document.getElementById('cancelBtn').addEventListener('click', () => {
+  if (!dirty) return;
+  if (!confirm('Discard your unsaved changes?')) return;
+  state = clone(saved);
+  aiPaths.clear(); aiItems.clear(); errors = {};
+  dirty = false; undoSnapshot = null;
+  renderForms();
+  renderResult(null);
+});
+window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ======================================================================
+   Resume upload & extraction
+   ====================================================================== */
+const els = {
+  idle: document.getElementById('afIdle'),
+  busy: document.getElementById('afBusy'),
+  result: document.getElementById('afResult'),
+  input: document.getElementById('resumeInput'),
+  drop: document.getElementById('dropZone'),
+  busyFile: document.getElementById('busyFile'),
+  busyBar: document.getElementById('busyBar'),
+  busyText: document.getElementById('busyText'),
+  replace: document.getElementById('replaceExisting'),
+};
+document.getElementById('dropHint').textContent = `PDF, DOC or DOCX · up to ${CONFIG.maxResumeMb} MB`;
+
+els.input.addEventListener('change', () => { if (els.input.files[0]) startExtraction(els.input.files[0]); els.input.value = ''; });
+els.drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); els.input.click(); } });
+['dragenter', 'dragover'].forEach(t => els.drop.addEventListener(t, e => { e.preventDefault(); els.drop.classList.add('dragging'); }));
+['dragleave', 'dragend'].forEach(t => els.drop.addEventListener(t, () => els.drop.classList.remove('dragging')));
+els.drop.addEventListener('drop', e => {
+  e.preventDefault();
+  els.drop.classList.remove('dragging');
+  const f = e.dataTransfer?.files?.[0];
+  if (f) startExtraction(f);
+});
+document.getElementById('cancelExtract').addEventListener('click', () => {
+  if (xhr) xhr.abort();
+  else if (mockTimer) { clearTimeout(mockTimer); mockTimer = null; setBusy(false); renderResult({ kind: 'info', title: 'Upload cancelled.' }); }
+});
+
+let busyTimer = null, mockTimer = null;
+function setBusy(on, file) {
+  els.idle.hidden = on;
+  els.busy.hidden = !on;
+  clearInterval(busyTimer);
+  if (on) {
+    els.busyFile.textContent = file.name;
+    els.busyBar.classList.remove('indeterminate');
+    els.busyBar.firstElementChild.style.width = '0%';
+    els.busyText.textContent = 'Uploading…';
+    renderResult(null);
+  }
+}
+function setUploadProgress(frac) { els.busyBar.firstElementChild.style.width = Math.round(frac * 100) + '%'; els.busyText.textContent = `Uploading… ${Math.round(frac * 100)}%`; }
+function setExtracting() {
+  els.busyBar.classList.add('indeterminate');
+  els.busyBar.firstElementChild.style.width = '';
+  const t0 = Date.now();
+  const tick = () => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    els.busyText.textContent = `Reading your resume and extracting details… ${s}s` + (s > 20 ? ' · scanned or long resumes can take a minute' : '');
+  };
+  tick();
+  busyTimer = setInterval(tick, 1000);
+}
+
+function startExtraction(file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!CONFIG.acceptedExt.includes(ext)) {
+    renderResult({ kind: 'err', title: 'Unsupported file type', body: 'Please upload a PDF, DOC or DOCX resume.' });
+    return;
+  }
+  if (file.size > CONFIG.maxResumeMb * 1024 * 1024) {
+    renderResult({ kind: 'err', title: 'File is too large', body: `Resumes must be ${CONFIG.maxResumeMb} MB or smaller.` });
+    return;
+  }
+  if (file.size === 0) {
+    renderResult({ kind: 'err', title: 'File is empty', body: 'Please choose a different resume file.' });
+    return;
+  }
+  setBusy(true, file);
+  if (MOCK) return runMock(file);
+
+  xhr = new XMLHttpRequest();
+  xhr.open('POST', CONFIG.extractUrl);
+  xhr.timeout = CONFIG.extractTimeoutMs;
+  xhr.setRequestHeader('Accept', 'application/json');
+  xhr.upload.onprogress = e => { if (e.lengthComputable) setUploadProgress(e.loaded / e.total); };
+  xhr.upload.onload = setExtracting;
+  xhr.onload = () => {
+    const r = xhr; xhr = null; setBusy(false);
+    if (r.status >= 200 && r.status < 300) {
+      let data;
+      try { data = JSON.parse(r.responseText); } catch { return renderResult({ kind: 'err', title: "Couldn't read the response", body: 'The server returned something that is not JSON.' }); }
+      return handleExtracted(data, file.name);
+    }
+    const unavailable = r.status === 404 || r.status === 405 || r.status === 501;
+    renderResult({
+      kind: 'err',
+      title: unavailable ? 'Resume autofill is not available yet' : "We couldn't extract your resume",
+      body: unavailable ? `The extraction service didn't respond at ${CONFIG.extractUrl} (HTTP ${r.status}).` : responseErrorSync(r.status, r.responseText),
+      sample: unavailable,
+    });
+  };
+  const fail = (title, body) => () => { xhr = null; setBusy(false); renderResult({ kind: title === 'Upload cancelled.' ? 'info' : 'err', title, body }); };
+  xhr.onerror = fail('Network error', 'Check your connection and try again.');
+  xhr.ontimeout = fail('This is taking too long', 'Extraction timed out. Try again, or try a smaller or text-based PDF.');
+  xhr.onabort = fail('Upload cancelled.');
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  xhr.send(fd);
+}
+
+function runMock(file) {
+  let p = 0;
+  const step = () => {
+    p += 0.25;
+    if (p < 1) { setUploadProgress(p); mockTimer = setTimeout(step, 120); return; }
+    setUploadProgress(1);
+    setExtracting();
+    mockTimer = setTimeout(() => { mockTimer = null; setBusy(false); handleExtracted(SAMPLE, file ? file.name : 'sample resume'); }, 1400);
+  };
+  step();
+}
+
+function responseErrorSync(status, text) {
+  try {
+    const j = JSON.parse(text);
+    const m = j?.error?.message || (typeof j?.detail === 'string' ? j.detail : Array.isArray(j?.detail) ? j.detail.map(d => d.msg).join('; ') : j?.message);
+    if (m) return m;
+  } catch { /* not JSON */ }
+  if (status === 413) return 'The file is too large for the server.';
+  if (status === 415) return 'The server does not support this file type.';
+  return `The server returned HTTP ${status}. Please try again.`;
+}
+async function responseError(status, text) { return responseErrorSync(status, text); }
+
+function handleExtracted(data, fileName) {
+  const raw = data?.profile ?? data?.data ?? data;
+  const keys = Object.values(TABS);
+  if (!raw || typeof raw !== 'object' || !keys.some(k => k in raw)) {
+    renderResult({ kind: 'err', title: "Couldn't understand the extracted data", body: 'The response did not contain any profile sections.' });
+    return;
+  }
+  const snapshot = { state: clone(state), ai: new Set(aiPaths), items: new Set(aiItems), errors: { ...errors }, dirty };
+  const res = applyExtraction(raw, { replace: els.replace.checked });
+  if (res.filled === 0) {
+    renderResult({
+      kind: 'info',
+      title: 'Nothing new to fill',
+      body: res.kept ? `Your profile already has values for ${res.kept} field${res.kept === 1 ? '' : 's'} found in ${fileName}. Tick “Replace fields I've already filled” to overwrite them.` : `We couldn't find profile details in ${fileName}.`,
+      warnings: res.warnings,
+    });
+    return;
+  }
+  undoSnapshot = snapshot;
+  dirty = true;
+  renderForms();
+  const firstTab = Object.keys(TABS).find(t => res.perSection[TABS[t]]);
+  switchTab(firstTab);
+  const parts = Object.entries(TABS).filter(([, s]) => res.perSection[s]).map(([t, s]) => `${document.getElementById('tab-' + t).firstChild.textContent.trim()} (${res.perSection[s]})`);
+  renderResult({
+    kind: 'ok',
+    title: `Filled ${res.filled} field${res.filled === 1 ? '' : 's'} from ${fileName}`,
+    body: `${parts.join(', ')}. Fields marked “✦ From resume” are highlighted. Review them, then click Save Changes.` +
+      (res.kept ? ` ${res.kept} field${res.kept === 1 ? '' : 's'} kept your existing value.` : ''),
+    warnings: res.warnings,
+    undo: true,
+  });
+}
+
+function renderResult(r) {
+  if (!r) { els.result.innerHTML = ''; return; }
+  els.result.innerHTML = `<div class="result ${r.kind}">
+    <p class="result-title">${esc(r.title)}</p>
+    ${r.body ? `<p>${esc(r.body)}</p>` : ''}
+    ${r.warnings?.length ? `<ul>${r.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+    ${r.undo || r.sample ? `<div class="result-actions">
+      ${r.undo ? '<button type="button" class="btn btn-outline btn-sm" data-r="undo">Undo autofill</button>' : ''}
+      ${r.sample ? '<button type="button" class="btn btn-outline btn-sm" data-r="sample">Try with sample data</button>' : ''}
+    </div>` : ''}
+  </div>`;
+}
+els.result.addEventListener('click', e => {
+  const a = e.target.closest('[data-r]')?.dataset.r;
+  if (a === 'undo' && undoSnapshot) {
+    state = undoSnapshot.state;
+    errors = undoSnapshot.errors;
+    dirty = undoSnapshot.dirty;
+    aiPaths = undoSnapshot.ai;
+    aiItems = undoSnapshot.items;
+    undoSnapshot = null;
+    renderForms();
+    renderResult({ kind: 'info', title: 'Autofill undone.' });
+  } else if (a === 'sample') {
+    setBusy(true, { name: 'sample-resume.pdf' });
+    runMock({ name: 'sample-resume.pdf' });
+  }
+});
+
+/* ======================================================================
+   Sample extraction (used by ?mock=1 and "Try with sample data")
+   ====================================================================== */
+const SAMPLE = {
+  basic_details: {
+    first_name: 'Aarav', middle_name: null, last_name: 'Mehta', alternate_phone_number: '+91 98765 43210', gender: 'Male',
+    primary_address: { house_flat_building: 'Flat 1204, Palm Grove Residency', street_area_locality: 'Sector 47, Sohna Road', landmark: 'Near Metro Station', country: 'India', state: 'Haryana', city: 'Gurgaon', pincode: '122018' },
+    additional_addresses: [],
+  },
+  networking: {
+    profession: 'Senior Software Engineer', location: 'Gurgaon, India', date_of_birth: '14-08-1995',
+    tag_line: 'Building reliable B2B platforms at scale',
+    about: 'Backend-leaning full-stack engineer with 6+ years building B2B marketplaces and payment integrations. Comfortable across Python, TypeScript and cloud infrastructure.',
+    social_links: [{ platform: 'LinkedIn', url: 'https://www.linkedin.com/in/aarav-mehta-example' }, { platform: 'github', url: 'https://github.com/aarav-example' }],
+  },
+  education_and_experience: {
+    education: [{ institute_name: 'Delhi Technological University', degree: 'B.Tech', field_of_study: 'Computer Engineering', location: 'New Delhi', from_date: '2013-08', to_date: 'May 2017', currently_studying_here: false, description: null }],
+    experience: [
+      { company_name: 'Nimbus Commerce', designation: 'Senior Software Engineer', employment_type: 'Full Time', location: 'Gurgaon', from_date: '01-04-2021', to_date: null, currently_working_here: true, description: 'Lead the payments and invoicing services; cut settlement time by 40%.' },
+      { company_name: 'Quanta Labs', designation: 'Software Engineer', employment_type: 'Full-time', location: 'Noida', from_date: '01-07-2017', to_date: '31-03-2021', currently_working_here: false, description: 'Built supplier onboarding and search APIs.' },
+    ],
+  },
+  career_preferences: {
+    mode: 'Looking for Job', job_category: 'Information Technology', employment_type: 'Full-Time', work_mode: 'Hybrid',
+    preferred_country: 'India', preferred_state: 'Haryana', preferred_city: 'Gurgaon',
+    experience_years_min: 5, experience_years_max: 8, salary_inr_per_year_min: 2400000, salary_inr_per_year_max: 3200000,
+  },
+};
+
+/* ======================================================================
+   Boot
+   ====================================================================== */
+(function init() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(CONFIG.draftKey) || 'null');
+    if (draft && typeof draft === 'object') { state = normalizeProfile(draft).data; fixups(); }
+  } catch { /* no draft */ }
+  saved = clone(state);
+  renderForms();
+  switchTab(new URLSearchParams(location.search).get('tab') || 'basic');
+  if (MOCK) renderResult({ kind: 'info', title: 'Mock mode', body: 'Uploads are not sent to the server. Any PDF/DOC/DOCX will autofill with sample data.' });
+})();
+
+// Integration hooks for the backend / host app.
+window.BONCProfile = {
+  getData,
+  setData(obj) { state = normalizeProfile(obj || {}).data; fixups(); saved = clone(state); aiPaths.clear(); aiItems.clear(); errors = {}; dirty = false; renderForms(); },
+  applyExtraction(obj, opts) { const r = applyExtraction(obj, opts); dirty = dirty || r.filled > 0; renderForms(); return r; },
+};
+</script>
+</body>
+</html>
