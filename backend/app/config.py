@@ -71,7 +71,10 @@ class Settings(BaseSettings):
     summary_reduce_max_new_tokens: int = 1200
 
     # --- Profile extraction -------------------------------------------------
-    profile_max_new_tokens: int = 1536
+    profile_max_new_tokens: int = 2048
+    # Use a PDF's own text layer for resumes when it passes the parse quality gate; scanned
+    # resumes (and False here) use the same OCR chain as legal/normal documents.
+    profile_prefer_text_layer: bool = True
 
     @property
     def documents_dir(self) -> Path:

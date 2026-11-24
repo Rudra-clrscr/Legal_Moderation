@@ -115,8 +115,12 @@
     flex: none; width: 64px; height: 64px; border-radius: 50%;
     background: var(--brand-soft); color: var(--brand);
     display: grid; place-items: center; font-weight: 700; font-size: 22px;
-    border: 2px solid var(--brand-border);
+    border: 2px solid var(--brand-border); overflow: hidden;
   }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .avatar-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+  .avatar-clear { background: none; border: none; padding: 0; font-size: 11px; color: var(--sub); cursor: pointer; text-decoration: underline; }
+  .avatar-clear:hover { color: var(--danger); }
   .summary-main { flex: 1; min-width: 0; }
   .summary-name { font-size: 18px; font-weight: 700; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .summary-name.placeholder { color: var(--faint); }
@@ -319,7 +323,10 @@
 
   <!-- Profile summary -->
   <section class="card summary" aria-label="Profile summary">
-    <div class="avatar" id="sumAvatar" aria-hidden="true">?</div>
+    <div class="avatar-wrap">
+      <div class="avatar" id="sumAvatar" aria-hidden="true">?</div>
+      <button type="button" class="avatar-clear" id="clearAvatarBtn" hidden>Remove photo</button>
+    </div>
     <div class="summary-main">
       <p class="summary-name" id="sumName">Your name</p>
       <p class="summary-tag" id="sumTag"></p>
@@ -347,10 +354,10 @@
         </span>
         <span class="drop-text">
           <span>Drag your resume here or <strong>browse</strong></span>
-          <small id="dropHint">PDF, DOC or DOCX · up to 10 MB</small>
+          <small id="dropHint">PDF, DOC, DOCX or image (PNG, JPG, TIFF, WEBP) · up to 10 MB</small>
         </span>
       </label>
-      <input type="file" id="resumeInput" class="sr-only" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+      <input type="file" id="resumeInput" class="sr-only" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.tif,.tiff,.webp,.bmp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/tiff,image/webp,image/bmp">
       <label class="replace-opt">
         <input type="checkbox" id="replaceExisting">
         Replace fields I've already filled
@@ -405,7 +412,7 @@ const CONFIG = {
   extractUrl: '/api/profile/extract-resume',
   saveUrl: null,                     // e.g. '/api/profile' (PUT). null → local draft.
   maxResumeMb: 10,
-  acceptedExt: ['pdf', 'doc', 'docx'],
+  acceptedExt: ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'webp', 'bmp'],
   extractTimeoutMs: 5 * 60 * 1000,   // local LLM on CPU can be slow
   draftKey: 'bonc.profile.draft.v1',
 };
@@ -475,6 +482,7 @@ function defaultProfile() {
       preferred_country: null, preferred_state: null, preferred_city: null,
       experience_years_min: null, experience_years_max: null, salary_inr_per_year_min: null, salary_inr_per_year_max: null,
     },
+    profile_image: null,
   };
 }
 
@@ -538,14 +546,15 @@ function matchEnum(v, options) {
   const syn = SYNONYMS[k];
   return syn && options.includes(syn) ? syn : null;
 }
+const URL_PLATFORMS = [
+  ['linkedin.com', 'LinkedIn'], ['github.com', 'GitHub'], ['instagram.com', 'Instagram'],
+  ['facebook.com', 'Facebook'], ['fb.com', 'Facebook'], ['twitter.com', 'Twitter'], ['x.com', 'Twitter'],
+];
+// Platform implied by a well-known domain, or null for other sites.
 function platformFromUrl(url) {
-  const u = String(url).toLowerCase();
-  if (u.includes('linkedin.')) return 'LinkedIn';
-  if (/(^|[/.])(twitter|x)\.com/.test(u)) return 'Twitter';
-  if (u.includes('instagram.')) return 'Instagram';
-  if (u.includes('facebook.') || u.includes('fb.com')) return 'Facebook';
-  if (u.includes('github.')) return 'GitHub';
-  return 'Website';
+  const host = String(url).trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').split('/')[0].split(':')[0];
+  const hit = URL_PLATFORMS.find(([d]) => host === d || host.endsWith('.' + d));
+  return hit ? hit[1] : null;
 }
 
 /* ======================================================================
@@ -607,7 +616,10 @@ function normalizeProfile(raw) {
   const seenUrls = new Set();
   N.social_links = arr(n.social_links).map(s => {
     const url = str(s.url);
-    return url ? { platform: matchEnum(s.platform, ENUMS.platform) || platformFromUrl(url), url } : null;
+    if (!url) return null;
+    // A well-known domain beats the model's label (it often copies "LinkedIn" onto any link).
+    const platform = platformFromUrl(url) || matchEnum(s.platform, ENUMS.platform) || 'Website';
+    return { platform, url };
   }).filter(s => s && !seenUrls.has(normKey(s.url)) && seenUrls.add(normKey(s.url)));
 
   const period = (x, flag, label) => {
@@ -637,6 +649,7 @@ function normalizeProfile(raw) {
   C.preferred_country = str(c.preferred_country); C.preferred_state = str(c.preferred_state); C.preferred_city = str(c.preferred_city);
   C.experience_years_min = num(c.experience_years_min); C.experience_years_max = num(c.experience_years_max);
   C.salary_inr_per_year_min = num(c.salary_inr_per_year_min, true); C.salary_inr_per_year_max = num(c.salary_inr_per_year_max, true);
+  o.profile_image = typeof raw.profile_image === 'string' && raw.profile_image.startsWith('data:image/') ? raw.profile_image : null;
 
   return { data: o, warnings: warn };
 }
@@ -673,6 +686,12 @@ function applyExtraction(raw, { replace = false } = {}) {
     if (p === 'career_preferences.mode' && !replace) continue; // a resume rarely means "Looking for Talent"
     put(p, getPath(x, p));
   }
+  let photoFilled = false;
+  if (x.profile_image && (replace || !state.profile_image) && state.profile_image !== x.profile_image) {
+    state.profile_image = x.profile_image;
+    photoFilled = true;
+    filled++;
+  }
   for (const [ap, keyFn, fields, max] of LISTS) {
     const list = getPath(state, ap);
     for (const item of getPath(x, ap)) {
@@ -689,7 +708,7 @@ function applyExtraction(raw, { replace = false } = {}) {
     }
   }
   fixups();
-  return { filled, kept, warnings: [...new Set(warnings)], perSection };
+  return { filled, kept, photoFilled, warnings: [...new Set(warnings)], perSection };
 }
 
 // Keep cross-field invariants after any bulk change.
@@ -940,8 +959,15 @@ function updateSummary() {
   const nameEl = document.getElementById('sumName');
   nameEl.textContent = name || 'Your name';
   nameEl.classList.toggle('placeholder', !name);
-  document.getElementById('sumAvatar').textContent =
-    (((B.first_name || '')[0] || '') + ((B.last_name || '')[0] || '')).toUpperCase() || '?';
+  const avatarEl = document.getElementById('sumAvatar');
+  const clearAvatarBtn = document.getElementById('clearAvatarBtn');
+  if (state.profile_image) {
+    avatarEl.innerHTML = `<img src="${esc(state.profile_image)}" alt="Profile photo">`;
+    if (clearAvatarBtn) clearAvatarBtn.hidden = false;
+  } else {
+    avatarEl.textContent = (((B.first_name || '')[0] || '') + ((B.last_name || '')[0] || '')).toUpperCase() || '?';
+    if (clearAvatarBtn) clearAvatarBtn.hidden = true;
+  }
   document.getElementById('sumTag').textContent = N.tag_line || '';
   document.getElementById('sumMeta').textContent = [N.profession, N.location].filter(Boolean).join(' · ');
 
@@ -1219,6 +1245,12 @@ async function save() {
   }
 }
 
+document.getElementById('clearAvatarBtn').addEventListener('click', () => {
+  state.profile_image = null;
+  markDirty();
+  updateSummary();
+});
+
 document.getElementById('saveBtn').addEventListener('click', save);
 document.getElementById('cancelBtn').addEventListener('click', () => {
   if (!dirty) return;
@@ -1245,7 +1277,7 @@ const els = {
   busyText: document.getElementById('busyText'),
   replace: document.getElementById('replaceExisting'),
 };
-document.getElementById('dropHint').textContent = `PDF, DOC or DOCX · up to ${CONFIG.maxResumeMb} MB`;
+document.getElementById('dropHint').textContent = `PDF, DOC, DOCX or image (PNG, JPG, TIFF, WEBP) · up to ${CONFIG.maxResumeMb} MB`;
 
 els.input.addEventListener('change', () => { if (els.input.files[0]) startExtraction(els.input.files[0]); els.input.value = ''; });
 els.drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); els.input.click(); } });
@@ -1291,7 +1323,7 @@ function setExtracting() {
 function startExtraction(file) {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
   if (!CONFIG.acceptedExt.includes(ext)) {
-    renderResult({ kind: 'err', title: 'Unsupported file type', body: 'Please upload a PDF, DOC or DOCX resume.' });
+    renderResult({ kind: 'err', title: 'Unsupported file type', body: 'Please upload a PDF, DOC, DOCX or image (PNG, JPG, TIFF, WEBP, BMP) resume.' });
     return;
   }
   if (file.size > CONFIG.maxResumeMb * 1024 * 1024) {
@@ -1322,7 +1354,9 @@ function startExtraction(file) {
     renderResult({
       kind: 'err',
       title: unavailable ? 'Resume autofill is not available yet' : "We couldn't extract your resume",
-      body: unavailable ? `The extraction service didn't respond at ${CONFIG.extractUrl} (HTTP ${r.status}).` : responseErrorSync(r.status, r.responseText),
+      body: unavailable
+        ? `The server has no resume extraction endpoint at ${CONFIG.extractUrl} (HTTP ${r.status}). If the backend was updated recently, restart it.`
+        : responseErrorSync(r.status, r.responseText),
       sample: unavailable,
     });
   };
@@ -1380,9 +1414,10 @@ function handleExtracted(data, fileName) {
   undoSnapshot = snapshot;
   dirty = true;
   renderForms();
-  const firstTab = Object.keys(TABS).find(t => res.perSection[TABS[t]]);
+  const firstTab = Object.keys(TABS).find(t => res.perSection[TABS[t]]) || 'basic';
   switchTab(firstTab);
   const parts = Object.entries(TABS).filter(([, s]) => res.perSection[s]).map(([t, s]) => `${document.getElementById('tab-' + t).firstChild.textContent.trim()} (${res.perSection[s]})`);
+  if (res.photoFilled) parts.push('Profile Photo');
   renderResult({
     kind: 'ok',
     title: `Filled ${res.filled} field${res.filled === 1 ? '' : 's'} from ${fileName}`,

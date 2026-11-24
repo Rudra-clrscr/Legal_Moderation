@@ -179,6 +179,9 @@ class _NoSummary(LegalBotError):
         super().__init__("No summary has been generated for this document yet.")
 
 
+_RESUME_SUFFIXES = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp"}
+
+
 # --- BONC Profile ---------------------------------------------------------------------
 @router.post("/profile/extract-resume", response_model=BONCProfileExtraction)
 async def extract_resume(
@@ -187,7 +190,7 @@ async def extract_resume(
 ) -> BONCProfileExtraction:
     c.settings.tmp_dir.mkdir(parents=True, exist_ok=True)
     raw_suffix = Path(file.filename or "").suffix.lower()
-    suffix = raw_suffix if raw_suffix in {".pdf", ".doc", ".docx"} else ""
+    suffix = raw_suffix if raw_suffix in _RESUME_SUFFIXES else ""
     tmp_path = c.settings.tmp_dir / f"resume_{uuid.uuid4().hex}{suffix}"
     try:
         size = 0

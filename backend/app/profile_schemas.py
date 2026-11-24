@@ -201,9 +201,35 @@ class BasicDetails(BaseModel):
         return self
 
 
+_URL_PLATFORMS = (
+    ("linkedin.com", "LinkedIn"),
+    ("github.com", "GitHub"),
+    ("instagram.com", "Instagram"),
+    ("facebook.com", "Facebook"),
+    ("fb.com", "Facebook"),
+    ("twitter.com", "Twitter"),
+    ("x.com", "Twitter"),
+)
+
+
+def platform_from_url(url: str) -> str | None:
+    """Platform implied by a well-known domain, or None for other sites."""
+    host = re.sub(r"^[a-z][a-z0-9+.-]*://", "", url.strip().lower()).split("/")[0].split(":")[0]
+    for domain, platform in _URL_PLATFORMS:
+        if host == domain or host.endswith("." + domain):
+            return platform
+    return None
+
+
 class SocialLink(BaseModel):
     platform: SocialPlatform = "Other"
     url: str
+
+    @model_validator(mode="after")
+    def _trust_url_over_label(self) -> "SocialLink":
+        # Small models often copy the prompt's example label ("LinkedIn") onto any link.
+        self.platform = platform_from_url(self.url) or self.platform
+        return self
 
     @field_validator("platform", mode="before")
     @classmethod
@@ -399,6 +425,7 @@ class BONCProfileExtraction(BaseModel):
     networking: Networking = Field(default_factory=Networking)
     education_and_experience: EducationAndExperience = Field(default_factory=EducationAndExperience)
     career_preferences: CareerPreferences = Field(default_factory=CareerPreferences)
+    profile_image: str | None = None
 
     @field_validator(
         "basic_details",
@@ -412,3 +439,11 @@ class BONCProfileExtraction(BaseModel):
         if isinstance(value, (dict, BaseModel)):
             return value
         return {}
+
+    @field_validator("profile_image", mode="before")
+    @classmethod
+    def _clean_profile_image(cls, value: Any) -> str | None:
+        cleaned = _clean_str(value)
+        if cleaned and cleaned.startswith("data:image/"):
+            return cleaned
+        return None
