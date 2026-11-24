@@ -387,6 +387,7 @@ _IMAGE_SIGNATURES = {
     b"\xff\xd8\xff": "jpeg",
     b"II*\x00": "tiff",
     b"MM\x00*": "tiff",
+    b"BM": "bmp",
 }
 
 
@@ -410,6 +411,8 @@ def detect_file_type(path: Path) -> str:
         head = handle.read(1024)
     if b"%PDF-" in head:
         return "pdf"
+    if head.startswith(b"RIFF") and len(head) >= 12 and head[8:12] == b"WEBP":
+        return "image"
     for signature in _IMAGE_SIGNATURES:
         if head.startswith(signature):
             return "image"
@@ -419,7 +422,7 @@ def detect_file_type(path: Path) -> str:
     if head.startswith(b"PK\x03\x04") and _is_docx(path):
         return "word"
     raise UnsupportedFileTypeError(
-        "Supported formats: PDF, Word (.doc, .docx) and scanned images (PNG, JPEG, TIFF)."
+        "Supported formats: PDF, Word (.doc, .docx) and scanned images (PNG, JPEG, TIFF, BMP, WEBP)."
     )
 
 

@@ -47,6 +47,7 @@ class GenerationOptions:
     top_p: float = 0.9
     repetition_penalty: float = 1.05
     engine: Literal["auto", "gpu", "cpu"] = "auto"
+    json_mode: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +149,7 @@ class LLMGenerator:
         self._state: Literal["not_loaded", "loading", "ready", "error"] = "not_loaded"
         self._load_error: str | None = None
         self._active_provider: str = provider
+        self._ollama_client: Any = None
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "LLMGenerator":
@@ -299,28 +301,42 @@ class LLMGenerator:
         return len(self._tokenizer.encode(text, add_special_tokens=False).ids)
 
     # -- Generation ------------------------------------------------------------------
+    def _get_ollama_client(self):
+        if self._ollama_client is None:
+            from openai import AsyncOpenAI
+
+            v1_url = f"{self.ollama_base_url.rstrip('/')}/v1"
+            self._ollama_client = AsyncOpenAI(base_url=v1_url, api_key="ollama", timeout=120.0)
+        return self._ollama_client
+
     async def _stream_ollama(
         self, messages: Sequence[ChatMessage], options: GenerationOptions
     ) -> AsyncIterator[str]:
-        from openai import AsyncOpenAI
-        v1_url = f"{self.ollama_base_url.rstrip('/')}/v1"
-        client = AsyncOpenAI(base_url=v1_url, api_key="ollama", timeout=60.0)
+        client = self._get_ollama_client()
         formatted = [{"role": m.role, "content": m.content} for m in messages]
-        extra_body: dict[str, Any] = {}
+        # Always the full window: Ollama's default context silently cuts long prompts, and a
+        # num_ctx that varies per request forces a model reload (3-5 s on CPU) on every change.
+        ollama_opts: dict[str, Any] = {
+            "num_ctx": self.context_window,
+            "repeat_penalty": options.repetition_penalty,
+        }
         if options.engine == "cpu":
-            extra_body["options"] = {"num_gpu": 0}
+            ollama_opts["num_gpu"] = 0
         elif options.engine == "gpu":
-            extra_body["options"] = {"num_gpu": 99}
+            ollama_opts["num_gpu"] = 99
+        create_kwargs: dict[str, Any] = {
+            "model": self.ollama_model,
+            "messages": formatted,
+            "stream": True,
+            "temperature": options.temperature,
+            "top_p": options.top_p,
+            "max_tokens": options.max_new_tokens,
+            "extra_body": {"options": ollama_opts, "keep_alive": "10m"},
+        }
+        if options.json_mode:
+            create_kwargs["response_format"] = {"type": "json_object"}
         try:
-            resp = await client.chat.completions.create(
-                model=self.ollama_model,
-                messages=formatted,
-                stream=True,
-                temperature=options.temperature,
-                top_p=options.top_p,
-                max_tokens=options.max_new_tokens,
-                extra_body=extra_body if extra_body else None,
-            )
+            resp = await client.chat.completions.create(**create_kwargs)
             async for chunk in resp:
                 if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                     piece = chunk.choices[0].delta.content
@@ -331,8 +347,6 @@ class LLMGenerator:
         except Exception as exc:
             logger.exception("Ollama generation error: %s", exc)
             raise LLMGenerationError(f"Ollama generation failed: {exc}") from exc
-        finally:
-            await client.close()
 
     async def stream(
         self, messages: Sequence[ChatMessage], options: GenerationOptions | None = None

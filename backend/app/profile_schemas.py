@@ -425,6 +425,7 @@ class BONCProfileExtraction(BaseModel):
     networking: Networking = Field(default_factory=Networking)
     education_and_experience: EducationAndExperience = Field(default_factory=EducationAndExperience)
     career_preferences: CareerPreferences = Field(default_factory=CareerPreferences)
+    profile_image: str | None = None
 
     @field_validator(
         "basic_details",
@@ -438,3 +439,11 @@ class BONCProfileExtraction(BaseModel):
         if isinstance(value, (dict, BaseModel)):
             return value
         return {}
+
+    @field_validator("profile_image", mode="before")
+    @classmethod
+    def _clean_profile_image(cls, value: Any) -> str | None:
+        cleaned = _clean_str(value)
+        if cleaned and cleaned.startswith("data:image/"):
+            return cleaned
+        return None
