@@ -24,6 +24,7 @@ from app.profile_schemas import (
     EXP_EMPLOYMENT_OPTIONS,
     GENDER_OPTIONS,
     JOB_CATEGORY_OPTIONS,
+    LANGUAGE_PROFICIENCY_OPTIONS,
     SOCIAL_PLATFORM_OPTIONS,
     WORK_MODE_OPTIONS,
 )
@@ -114,8 +115,17 @@ def build_profile_prompt(resume_text: str) -> str:
         "from_date": null,
         "to_date": null,
         "currently_working_here": false,
-        "description": null
+        "description": null,
+        "key_outcomes": null
       }}
+    ],
+    "skills": [],
+    "tools": [],
+    "languages": [
+      {{"language": null, "proficiency": null}}
+    ],
+    "certifications": [
+      {{"name": null, "issuer": null, "issue_date": null, "expiry_date": null, "credential_url": null}}
     ]
   }},
   "career_preferences": {{
@@ -129,9 +139,18 @@ def build_profile_prompt(resume_text: str) -> str:
     "experience_years_min": null,
     "experience_years_max": null,
     "salary_inr_per_year_min": null,
-    "salary_inr_per_year_max": null
+    "salary_inr_per_year_max": null,
+    "target_roles": [],
+    "preferred_locations": []
   }}
 }}
+
+Field notes:
+- experience[].key_outcomes: that role's measurable achievements from the resume, as "• " bullet lines (at most 3 bullets, 500 characters). description stays one short sentence about the role.
+- skills: skill names exactly as written in the resume, most important first (at most 20).
+- tools: software, frameworks, platforms and methodologies named in the resume (at most 20).
+- languages: spoken languages only, never programming languages.
+- target_roles / preferred_locations: only job titles and cities the candidate says they are seeking.
 
 Allowed enum values (use null if not explicitly present):
 - basic_details.gender: {", ".join(GENDER_OPTIONS)}
@@ -141,6 +160,7 @@ Allowed enum values (use null if not explicitly present):
 - career_preferences.job_category: {", ".join(JOB_CATEGORY_OPTIONS)}
 - career_preferences.employment_type: {", ".join(CAREER_EMPLOYMENT_OPTIONS)}
 - career_preferences.work_mode: {", ".join(WORK_MODE_OPTIONS)}
+- education_and_experience.languages[].proficiency: {", ".join(LANGUAGE_PROFICIENCY_OPTIONS)}
 
 <resume_text>
 {resume_text}

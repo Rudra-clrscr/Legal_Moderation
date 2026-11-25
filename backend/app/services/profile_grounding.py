@@ -74,11 +74,16 @@ def _ground_name(profile: BONCProfileExtraction, text: str) -> None:
     words = _find_name_line(text, b.first_name)
     if not words:
         return
-    lowered = [w.lower() for w in words]
-    # Only correct a split the line can explain: the model's last/middle name must be in it.
-    for part in (b.last_name, b.middle_name):
-        if part and any(p.lower() not in lowered for p in part.split()):
-            return
+    lowered = [w.lower().rstrip(".") for w in words]
+    # Only correct a split the line can explain: the model's last/middle name must be in it
+    # (a middle initial such as "A" counts for "Anand").
+    if b.last_name and any(p.lower() not in lowered for p in b.last_name.split()):
+        return
+    if b.middle_name:
+        for p in b.middle_name.split():
+            p = p.lower().rstrip(".")
+            if not p or not any(w == p or (len(p) == 1 and w.startswith(p)) for w in lowered[1:]):
+                return
     b.first_name = _display_case(words[0])
     b.last_name = _display_case(words[-1])
     b.middle_name = " ".join(_display_case(w) for w in words[1:-1]) or None
@@ -162,11 +167,11 @@ def _ground_links(profile: BONCProfileExtraction, text: str) -> None:
 # ---------------------------------------------------------------------------
 # Ongoing roles / studies
 # ---------------------------------------------------------------------------
-def _entry_window(text_lower: str, name: str, other_names: list[str]) -> str | None:
+def _entry_window(text_lower: str, name: str, other_names: list[str], size: int = _ENTRY_WINDOW_CHARS) -> str | None:
     start = text_lower.find(name.lower())
     if start < 0:
         return None
-    end = min(len(text_lower), start + len(name) + _ENTRY_WINDOW_CHARS)
+    end = min(len(text_lower), start + len(name) + size)
     for other in other_names:
         pos = text_lower.find(other.lower(), start + len(name))
         if 0 <= pos < end:
@@ -187,15 +192,160 @@ def _ground_ongoing(items: list, name_attr: str, flag_attr: str, text: str, all_
             setattr(item, flag_attr, True)
 
 
+# ---------------------------------------------------------------------------
+# Skills, tools, languages, certifications: keep only what the resume mentions
+# ---------------------------------------------------------------------------
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+_PROGRAMMING_LANGUAGES = {
+    "python", "java", "javascript", "typescript", "c", "c++", "c#", "go", "golang", "rust", "ruby", "php",
+    "kotlin", "swift", "scala", "sql", "r", "perl", "dart", "html", "css", "bash", "matlab",
+}
+
+
+def _squash(text: str) -> str:
+    return _NON_ALNUM_RE.sub("", text.lower())
+
+
+def _mentioned(name: str, squashed_text: str) -> bool:
+    key = _squash(name)
+    if len(key) < 3:  # "C", "R", "Go": too short to check reliably, keep
+        return True
+    if key in squashed_text:
+        return True
+    words = [w for w in _NON_ALNUM_RE.split(name.lower()) if len(w) >= 4]
+    return bool(words) and sum(w in squashed_text for w in words) * 2 >= len(words)
+
+
+_NO_EXPIRY_RE = re.compile(r"\b(?:no expiry|no expiration|does not expire|never expires|lifetime|non-expiring)\b", re.IGNORECASE)
+
+
+def _merge_split_names(names: list[str], text_lower: str) -> list[str]:
+    """Rejoin a term the model split in two ("Agentic AI" + "Workflows") when the resume
+    writes it as one phrase. Neighbours split by a comma stay apart, and so do one-per-line
+    lists; a line break only counts as a space inside a wrapped comma-separated line."""
+    out: list[str] = []
+    for name in names:
+        if out:
+            joined = f"{out[-1]} {name}"
+            pattern = r"(?<![a-z0-9])" + r"[ \t]*\n?[ \t]*".join(map(re.escape, joined.lower().split())) + r"(?![a-z0-9])"
+            for m in re.finditer(pattern, text_lower):
+                if "\n" not in m.group(0) or _is_wrapped_list_line(text_lower, m.start()):
+                    out[-1] = joined
+                    break
+            else:
+                out.append(name)
+            continue
+        out.append(name)
+    return out
+
+
+_WRAPPED_LINE_MIN_CHARS = 60  # a line only wraps once it reaches the page width
+
+
+def _is_wrapped_list_line(text: str, pos: int) -> bool:
+    line_start = text.rfind("\n", 0, pos) + 1
+    line = text[line_start: text.find("\n", pos)].rstrip()
+    return ", " in line and not line.endswith(",") and len(line) >= _WRAPPED_LINE_MIN_CHARS
+
+
+def _merge_split_skills(profile: BONCProfileExtraction, text_lower: str) -> None:
+    skills = profile.education_and_experience.skills
+    tiers = [(s, "primary") for s in skills.primary] + [(s, "secondary") for s in skills.secondary]
+    merged = _merge_split_names([s.name for s, _ in tiers], text_lower)
+    if len(merged) == len(tiers):
+        return
+    by_name = {s.name: (s, tier) for s, tier in tiers}
+    primary, secondary = [], []
+    for name in merged:
+        original = by_name.get(name)
+        if original is None:  # a joined name: keep the first part's rating and tier
+            first = next(s for s, _ in tiers if name.startswith(s.name + " "))
+            original = (first.model_copy(update={"name": name}), by_name[first.name][1])
+        (primary if original[1] == "primary" else secondary).append(original[0])
+    skills.primary, skills.secondary = primary, secondary
+
+
+def _ground_certifications(profile: BONCProfileExtraction, text: str) -> None:
+    for cert in profile.education_and_experience.certifications:
+        # "PMP - Project Management Institute": the issuer belongs in its own field.
+        if cert.issuer:
+            for sep in (" - ", " – ", " — ", ", "):
+                suffix = f"{sep}{cert.issuer}"
+                if cert.name.lower().endswith(suffix.lower()) and len(cert.name) > len(suffix):
+                    cert.name = cert.name[: -len(suffix)].strip()
+        if cert.does_not_expire or cert.expiry_date:
+            continue
+        pos = text.lower().find(cert.name.lower())
+        if pos >= 0:
+            line_end = text.find("\n", pos)
+            if _NO_EXPIRY_RE.search(text[pos: line_end if line_end >= 0 else len(text)]):
+                cert.does_not_expire = True
+
+
+def _ground_lists(profile: BONCProfileExtraction, text: str) -> None:
+    squashed = _squash(text)
+    _merge_split_skills(profile, text.lower())
+    _ground_certifications(profile, text)
+    ee = profile.education_and_experience
+    ee.skills.primary = [s for s in ee.skills.primary if _mentioned(s.name, squashed)]
+    ee.skills.secondary = [s for s in ee.skills.secondary if _mentioned(s.name, squashed)]
+    # Dropped primary skills leave room: promote from secondary to keep the top five full.
+    while len(ee.skills.primary) < 5 and ee.skills.secondary:
+        ee.skills.primary.append(ee.skills.secondary.pop(0))
+    ee.tools = [t for t in ee.tools if _mentioned(t, squashed)]
+    ee.languages = [
+        lang for lang in ee.languages
+        if lang.language.lower() not in _PROGRAMMING_LANGUAGES and _mentioned(lang.language, squashed)
+    ]
+    ee.certifications = [c for c in ee.certifications if _mentioned(c.name, squashed)]
+    prefs = profile.career_preferences
+    prefs.target_roles = [r for r in prefs.target_roles if _mentioned(r, squashed)]
+    prefs.preferred_locations = [loc for loc in prefs.preferred_locations if _mentioned(loc, squashed)]
+
+
+_OUTCOME_WINDOW_CHARS = 1500
+_OUTCOME_MIN_WORD_SHARE = 0.7
+_BULLET_PREFIX_RE = re.compile(r"^\s*[•\-*–·]+\s*")
+
+
+def _ground_outcomes(profile: BONCProfileExtraction, text: str, all_names: list[str]) -> None:
+    """Keep only achievement bullets written in that role's own part of the resume.
+
+    Small models pad this field with generic lines ("Collaborated with teams to ensure quality")
+    and copy bullets from neighbouring roles.
+    """
+    text_lower = text.lower()
+    for item in profile.education_and_experience.experience:
+        if not item.key_outcomes:
+            continue
+        anchor = item.company_name or item.designation
+        window = _entry_window(
+            text_lower, anchor, [n for n in all_names if n.lower() != anchor.lower()], _OUTCOME_WINDOW_CHARS
+        ) if anchor else None
+        if not window:
+            item.key_outcomes = None
+            continue
+        squashed = _squash(window)
+        kept = []
+        for line in item.key_outcomes.splitlines():
+            bullet = _BULLET_PREFIX_RE.sub("", line).strip()
+            words = [w for w in _NON_ALNUM_RE.split(bullet.lower()) if len(w) >= 4]
+            if words and sum(w in squashed for w in words) >= _OUTCOME_MIN_WORD_SHARE * len(words):
+                kept.append(f"• {bullet}")
+        item.key_outcomes = "\n".join(kept) or None
+
+
 def ground_profile(profile: BONCProfileExtraction, resume_text: str) -> BONCProfileExtraction:
     """Correct names, links and ongoing flags in place using evidence from ``resume_text``."""
     if not resume_text:
         return profile
     _ground_name(profile, resume_text)
     _ground_links(profile, resume_text)
+    _ground_lists(profile, resume_text)
     ee = profile.education_and_experience
     all_names = [e.company_name for e in ee.experience if e.company_name]
     all_names += [e.institute_name for e in ee.education if e.institute_name]
     _ground_ongoing(ee.experience, "company_name", "currently_working_here", resume_text, all_names)
     _ground_ongoing(ee.education, "institute_name", "currently_studying_here", resume_text, all_names)
+    _ground_outcomes(profile, resume_text, all_names)
     return profile

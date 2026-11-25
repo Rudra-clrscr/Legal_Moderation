@@ -59,6 +59,42 @@ JobCategory = Literal[
     "Supply Chain",
 ]
 
+# Tier-1 industry clusters: a fixed list so recruiter search can index on it.
+INDUSTRY_CLUSTER_OPTIONS = (
+    "Technology & Software",
+    "Banking, Financial Services & Insurance",
+    "Healthcare & Pharma",
+    "Consumer & Retail",
+    "Logistics & Supply Chain",
+    "Manufacturing & Industrial",
+    "Energy & Utilities",
+    "Telecom & Media",
+    "Education & EdTech",
+    "Real Estate & Construction",
+    "Automotive & Mobility",
+    "Travel, Hospitality & Food Services",
+    "Professional Services & Consulting",
+    "Government & Public Sector",
+    "Agriculture & Food Processing",
+    "Non-Profit & Social Impact",
+)
+LANGUAGE_PROFICIENCY_OPTIONS = ("Elementary", "Conversational", "Professional", "Fluent", "Native / Bilingual")
+SKILL_PROFICIENCY_MIN, SKILL_PROFICIENCY_MAX = 1, 10
+MAX_PRIMARY_SKILLS = 5
+MAX_SECONDARY_SKILLS = 15
+KEY_OUTCOMES_MAX_CHARS = 500
+
+IndustryCluster = Literal[INDUSTRY_CLUSTER_OPTIONS]  # type: ignore[valid-type]
+LanguageProficiency = Literal[LANGUAGE_PROFICIENCY_OPTIONS]  # type: ignore[valid-type]
+_LANGUAGE_SYNONYMS = {
+    "basic": "Elementary", "beginner": "Elementary", "elementaryproficiency": "Elementary",
+    "intermediate": "Conversational", "limitedworkingproficiency": "Conversational",
+    "professionalworkingproficiency": "Professional", "working": "Professional",
+    "fullprofessionalproficiency": "Fluent", "advanced": "Fluent", "proficient": "Fluent", "expert": "Fluent",
+    "native": "Native / Bilingual", "bilingual": "Native / Bilingual", "mothertongue": "Native / Bilingual",
+    "nativeorbilingualproficiency": "Native / Bilingual",
+}
+
 _ENUM_KEY_RE = re.compile(r"[^a-z0-9]")
 _ONGOING_TOKENS = {"present", "current", "currently", "ongoing", "now", "till date", "to date"}
 _ADDRESS_FIELDS = (
@@ -94,6 +130,25 @@ def _match_enum(value: Any, options: tuple[str, ...]) -> str | None:
         if _ENUM_KEY_RE.sub("", option.lower()) == key:
             return option
     return None
+
+
+def _clean_tags(value: Any, limit: int, max_len: int = 80) -> list[str]:
+    """A de-duplicated (case-insensitive) list of short strings; accepts a list or a comma list."""
+    if isinstance(value, str):
+        value = value.split(",")
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = _clean_str(item)
+        if not text or len(text) > max_len:
+            continue
+        key = _ENUM_KEY_RE.sub("", text.lower())
+        if key and key not in seen:
+            seen.add(key)
+            out.append(text)
+    return out[:limit]
 
 
 def _clean_float(value: Any) -> float | None:
@@ -316,6 +371,7 @@ class ExperienceItem(BaseModel):
     to_date: str | None = None
     currently_working_here: bool = False
     description: str | None = None
+    key_outcomes: str | None = None  # measurable achievements, "• " bullets, up to 500 chars
 
     @model_validator(mode="before")
     @classmethod
@@ -335,6 +391,14 @@ class ExperienceItem(BaseModel):
     def _clean_text(cls, value: Any) -> str | None:
         return _clean_str(value)
 
+    @field_validator("key_outcomes", mode="before")
+    @classmethod
+    def _clean_outcomes(cls, value: Any) -> str | None:
+        if isinstance(value, list):  # models often return bullets as a list
+            value = "\n".join(f"• {str(v).strip().lstrip('•-* ').strip()}" for v in value if _clean_str(v))
+        text = _clean_str(value)
+        return text[:KEY_OUTCOMES_MAX_CHARS].rstrip() if text else None
+
     @field_validator("employment_type", mode="before")
     @classmethod
     def _clean_employment_type(cls, value: Any) -> str | None:
@@ -346,9 +410,202 @@ class ExperienceItem(BaseModel):
         return value if isinstance(value, bool) else False
 
 
+class SkillItem(BaseModel):
+    name: str
+    proficiency: int | None = None  # 1-10: 1-3 Basic, 4-6 Intermediate, 7-8 Advanced, 9-10 Master
+    years: float | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _clean_name(cls, value: Any) -> str:
+        text = _clean_str(value)
+        if not text or len(text) > 80:
+            raise ValueError("Skill name must be 1-80 characters.")
+        return text
+
+    @field_validator("proficiency", mode="before")
+    @classmethod
+    def _clean_proficiency(cls, value: Any) -> int | None:
+        num = _clean_int(value)
+        return num if num is not None and SKILL_PROFICIENCY_MIN <= num <= SKILL_PROFICIENCY_MAX else None
+
+    @field_validator("years", mode="before")
+    @classmethod
+    def _clean_years(cls, value: Any) -> float | None:
+        num = _clean_float(value)
+        return round(num, 1) if num is not None and num <= 60 else None
+
+
+def _coerce_skill_list(value: Any) -> list[Any]:
+    if isinstance(value, str):
+        value = value.split(",")
+    if not isinstance(value, list):
+        return []
+    out: list[Any] = []
+    for item in value:
+        if isinstance(item, (str, int, float)) and not isinstance(item, bool):
+            item = {"name": item}
+        if isinstance(item, (dict, SkillItem)):
+            try:
+                out.append(SkillItem.model_validate(item))
+            except ValueError:
+                continue
+    return out
+
+
+class Skills(BaseModel):
+    primary: list[SkillItem] = Field(default_factory=list)
+    secondary: list[SkillItem] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_flat_list(cls, data: Any) -> Any:
+        # The model returns one ranked list; the first five become primary skills.
+        if isinstance(data, (list, str)):
+            return {"primary": _coerce_skill_list(data), "secondary": []}  # split after de-duplication
+        return data if isinstance(data, dict) else {}
+
+    @field_validator("primary", "secondary", mode="before")
+    @classmethod
+    def _coerce_items(cls, value: Any) -> list[Any]:
+        return _coerce_skill_list(value)
+
+    @model_validator(mode="after")
+    def _dedupe_and_cap(self) -> "Skills":
+        seen: set[str] = set()
+
+        def keep(items: list[SkillItem]) -> list[SkillItem]:
+            out = []
+            for s in items:
+                key = _ENUM_KEY_RE.sub("", s.name.lower())
+                if key and key not in seen:
+                    seen.add(key)
+                    out.append(s)
+            return out
+
+        primary = keep(self.primary)
+        secondary = keep(self.secondary)
+        # Overflow from primary moves down rather than being lost.
+        secondary = primary[MAX_PRIMARY_SKILLS:] + secondary
+        self.primary = primary[:MAX_PRIMARY_SKILLS]
+        self.secondary = secondary[:MAX_SECONDARY_SKILLS]
+        return self
+
+
+class LanguageItem(BaseModel):
+    language: str
+    proficiency: LanguageProficiency | None = None
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def _clean_language(cls, value: Any) -> str:
+        text = _clean_str(value)
+        if not text or len(text) > 40:
+            raise ValueError("Language must be 1-40 characters.")
+        return text
+
+    @field_validator("proficiency", mode="before")
+    @classmethod
+    def _clean_proficiency(cls, value: Any) -> str | None:
+        matched = _match_enum(value, LANGUAGE_PROFICIENCY_OPTIONS)
+        if matched:
+            return matched
+        key = _ENUM_KEY_RE.sub("", (_clean_str(value) or "").lower())
+        return _LANGUAGE_SYNONYMS.get(key)
+
+
+class CertificationItem(BaseModel):
+    name: str
+    issuer: str | None = None
+    issue_date: str | None = None
+    expiry_date: str | None = None
+    does_not_expire: bool = False
+    credential_url: str | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _clean_name(cls, value: Any) -> str:
+        text = _clean_str(value)
+        if not text:
+            raise ValueError("Certification name is required.")
+        return text
+
+    @field_validator("issuer", "issue_date", "expiry_date", "credential_url", mode="before")
+    @classmethod
+    def _clean_text(cls, value: Any) -> str | None:
+        return _clean_str(value)
+
+    @field_validator("does_not_expire", mode="before")
+    @classmethod
+    def _coerce_bool(cls, value: Any) -> bool:
+        return value if isinstance(value, bool) else False
+
+    @model_validator(mode="after")
+    def _no_expiry_clears_date(self) -> "CertificationItem":
+        if self.expiry_date and self.expiry_date.lower() in {"none", "never", "no expiry", "does not expire", "lifetime"}:
+            self.expiry_date, self.does_not_expire = None, True
+        if self.does_not_expire:
+            self.expiry_date = None
+        return self
+
+
+def _coerce_model_list(value: Any, model: type[BaseModel], limit: int, scalar_key: str | None = None) -> list[Any]:
+    if not isinstance(value, list):
+        return []
+    out: list[Any] = []
+    for item in value:
+        if scalar_key and isinstance(item, str):
+            item = {scalar_key: item}
+        if isinstance(item, (dict, model)):
+            try:
+                out.append(model.model_validate(item))
+            except ValueError:
+                continue
+    return out[:limit]
+
+
 class EducationAndExperience(BaseModel):
     education: list[EducationItem] = Field(default_factory=list)
     experience: list[ExperienceItem] = Field(default_factory=list)
+    skills: Skills = Field(default_factory=Skills)
+    tools: list[str] = Field(default_factory=list)  # tools, frameworks & systems
+    industry_clusters: list[IndustryCluster] = Field(default_factory=list)  # Tier 1, fixed list
+    sub_domains: list[str] = Field(default_factory=list)  # Tier 2, free text
+    languages: list[LanguageItem] = Field(default_factory=list)
+    certifications: list[CertificationItem] = Field(default_factory=list)
+
+    @field_validator("skills", mode="before")
+    @classmethod
+    def _coerce_skills(cls, value: Any) -> Any:
+        return value if isinstance(value, (dict, list, str, Skills)) else {}
+
+    @field_validator("tools", mode="before")
+    @classmethod
+    def _clean_tools(cls, value: Any) -> list[str]:
+        return _clean_tags(value, 30)
+
+    @field_validator("sub_domains", mode="before")
+    @classmethod
+    def _clean_sub_domains(cls, value: Any) -> list[str]:
+        return _clean_tags(value, 10)
+
+    @field_validator("industry_clusters", mode="before")
+    @classmethod
+    def _clean_clusters(cls, value: Any) -> list[str]:
+        matched = [_match_enum(v, INDUSTRY_CLUSTER_OPTIONS) for v in _clean_tags(value, 20)]
+        return list(dict.fromkeys(m for m in matched if m))[:3]
+
+    @field_validator("languages", mode="before")
+    @classmethod
+    def _coerce_languages(cls, value: Any) -> list[Any]:
+        items = _coerce_model_list(value, LanguageItem, 10, scalar_key="language")
+        seen: set[str] = set()
+        return [i for i in items if not (i.language.lower() in seen or seen.add(i.language.lower()))]
+
+    @field_validator("certifications", mode="before")
+    @classmethod
+    def _coerce_certifications(cls, value: Any) -> list[Any]:
+        return _coerce_model_list(value, CertificationItem, 20, scalar_key="name")
 
     @field_validator("education", mode="before")
     @classmethod
@@ -383,6 +640,39 @@ class CareerPreferences(BaseModel):
     experience_years_max: float | None = None
     salary_inr_per_year_min: int | None = None
     salary_inr_per_year_max: int | None = None
+    target_roles: list[str] = Field(default_factory=list)
+    work_modes: list[WorkMode] = Field(default_factory=list)  # multi-select; work_mode is the first
+    preferred_locations: list[str] = Field(default_factory=list)
+    open_to_relocation: bool = False
+
+    @field_validator("target_roles", mode="before")
+    @classmethod
+    def _clean_roles(cls, value: Any) -> list[str]:
+        return _clean_tags(value, 10, max_len=100)
+
+    @field_validator("preferred_locations", mode="before")
+    @classmethod
+    def _clean_locations(cls, value: Any) -> list[str]:
+        return _clean_tags(value, 10)
+
+    @field_validator("work_modes", mode="before")
+    @classmethod
+    def _clean_work_modes(cls, value: Any) -> list[str]:
+        matched = [_match_enum(v, WORK_MODE_OPTIONS) for v in _clean_tags(value, 10)]
+        return list(dict.fromkeys(m for m in matched if m))
+
+    @field_validator("open_to_relocation", mode="before")
+    @classmethod
+    def _coerce_bool(cls, value: Any) -> bool:
+        return value if isinstance(value, bool) else False
+
+    @model_validator(mode="after")
+    def _sync_work_mode(self) -> "CareerPreferences":
+        # Keep the original single work_mode field meaningful for existing consumers.
+        if self.work_mode and self.work_mode not in self.work_modes:
+            self.work_modes.insert(0, self.work_mode)
+        self.work_mode = self.work_modes[0] if self.work_modes else None
+        return self
 
     @field_validator("mode", mode="before")
     @classmethod

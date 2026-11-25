@@ -58,7 +58,8 @@
   }
 
   * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
+  /* Keep focused fields clear of the sticky top bar and the fixed save bar. */
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 72px; scroll-padding-bottom: 84px; }
   body {
     margin: 0;
     background: var(--bg);
@@ -286,6 +287,78 @@
 
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+  /* Pills (multi-value tags) */
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 40px; padding: 5px 6px;
+    border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); cursor: text; }
+  .pills:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-ring); }
+  .pills.ai-filled { border-color: var(--brand-border); }
+  .pill { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 3px 4px 3px 10px; border-radius: 99px;
+    background: var(--surface-2); border: 1px solid var(--line-2); font-size: 13px; color: var(--ink-2); }
+  .pill.ai { background: var(--brand-soft); border-color: var(--brand-border); color: var(--brand); }
+  .pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pill button { flex: none; width: 20px; height: 20px; border: 0; border-radius: 50%; background: transparent; color: var(--sub);
+    cursor: pointer; font-size: 15px; line-height: 1; display: grid; place-items: center; }
+  .pill button:hover { background: var(--line); color: var(--danger); }
+  .pill button:focus-visible { outline: 2px solid var(--brand); }
+  .pills input, .pills select { flex: 1 1 140px; min-width: 120px; border: 0; outline: 0; padding: 5px 4px; font: inherit; font-size: 13.5px; background: transparent; color: var(--ink); }
+  .pills select { cursor: pointer; color: var(--muted); }
+  .pills input:disabled, .pills select:disabled { display: none; }
+  .pill-count { margin-left: auto; font-size: 11.5px; color: var(--faint); padding: 0 4px; white-space: nowrap; }
+
+  /* Skills */
+  .skill-list { display: flex; flex-direction: column; gap: 8px; }
+  .skill-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.6fr) 92px auto; gap: 10px; align-items: center;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+  .skill-row.ai { border-color: var(--brand-border); box-shadow: inset 3px 0 0 var(--brand); }
+  .skill-row .input { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
+  .rating { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .rating input[type=range] { flex: 1; min-width: 70px; accent-color: var(--brand); cursor: pointer; }
+  .rating.unrated input[type=range] { opacity: .45; }
+  .tier { flex: none; width: 118px; font-size: 12px; font-weight: 600; color: var(--brand); white-space: nowrap; }
+  .rating.unrated .tier { color: var(--faint); font-weight: 500; }
+  .skill-actions { display: flex; gap: 2px; }
+  .skill-add { display: flex; gap: 8px; margin-top: 8px; }
+  .skill-add .input { flex: 1; }
+  .sub-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 4px 0 8px; }
+  .sub-head h4 { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+  .sub-head span { font-size: 12px; color: var(--sub); }
+  .tier-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--sub); margin: 0 0 14px; }
+  .tier-legend b { color: var(--ink-2); font-weight: 600; }
+  .sub-block + .sub-block { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+  /* Language rows */
+  .lang-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+
+  /* Switch */
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; cursor: pointer; }
+  .switch + .switch { border-top: 1px solid var(--line); }
+  .switch-text b { display: block; font-size: 13.5px; color: var(--ink); font-weight: 600; }
+  .switch-text small { display: block; font-size: 12.5px; color: var(--sub); margin-top: 2px; }
+  .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .switch-ui { flex: none; position: relative; width: 40px; height: 22px; border-radius: 99px; background: var(--line-2); transition: background .15s; }
+  .switch-ui::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); transition: transform .15s; }
+  .switch input:checked + .switch-ui { background: var(--brand); }
+  .switch input:checked + .switch-ui::after { transform: translateX(18px); }
+  .switch input:focus-visible + .switch-ui { box-shadow: 0 0 0 3px var(--brand-ring); }
+
+  .checks-row { display: flex; flex-wrap: wrap; gap: 4px 22px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 99px; margin-left: 8px; vertical-align: 1px; }
+  .badge.ok { color: var(--success); background: var(--success-soft); border: 1px solid var(--success-border); }
+  .badge.warn { color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn-border); }
+  .badge.bad { color: var(--danger); background: var(--danger-soft); border: 1px solid var(--danger-border); }
+  .resume-file { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); margin-bottom: 6px; }
+  .resume-file .name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .resume-file .name small { display: block; font-weight: 400; color: var(--sub); font-size: 12px; }
+
+  @media (max-width: 760px) {
+    .skill-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .skill-row .rating { grid-column: 1 / -1; grid-row: 2; }
+    .skill-row .years { grid-column: 1 / 2; grid-row: 3; }
+    .skill-row .skill-actions { grid-column: 2; grid-row: 1; }
+    .lang-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .lang-row .field:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  }
+
   @media (max-width: 760px) {
     .grid, .grid.cols-3 { grid-template-columns: minmax(0, 1fr); }
     .span-2 { grid-column: auto; }
@@ -401,6 +474,8 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="resumeAttach" class="sr-only" tabindex="-1" aria-label="Attach resume" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+<div id="datalists" hidden></div>
 
 <script>
 'use strict';
@@ -434,6 +509,62 @@ const ENUMS = {
     'Education & Training', 'Design & Creative', 'Legal & Compliance', 'Customer Support',
     'Business Development', 'Research & Development', 'Supply Chain',
   ],
+  // Tier 1: fixed list so recruiter search can index on it.
+  industry: [
+    'Technology & Software', 'Banking, Financial Services & Insurance', 'Healthcare & Pharma', 'Consumer & Retail',
+    'Logistics & Supply Chain', 'Manufacturing & Industrial', 'Energy & Utilities', 'Telecom & Media',
+    'Education & EdTech', 'Real Estate & Construction', 'Automotive & Mobility', 'Travel, Hospitality & Food Services',
+    'Professional Services & Consulting', 'Government & Public Sector', 'Agriculture & Food Processing', 'Non-Profit & Social Impact',
+  ],
+  langProf: ['Elementary', 'Conversational', 'Professional', 'Fluent', 'Native / Bilingual'],
+};
+const LIMITS = { primary: 5, secondary: 15, tools: 30, industry: 3, subDomains: 10, roles: 10, locations: 10, languages: 10, certifications: 20, outcomes: 500 };
+// 1–3 Basic, 4–6 Intermediate, 7–8 Advanced, 9–10 Master.
+function skillTier(n) { return n == null ? null : n <= 3 ? 'Basic' : n <= 6 ? 'Intermediate' : n <= 8 ? 'Advanced' : 'Master'; }
+
+/* Auto-suggest libraries. Anything typed that isn't listed is added as a custom tag. */
+const SUGGEST = {
+  skills: [
+    'Business Transformation', 'Six Sigma', 'Agentic AI Workflows', 'Process Optimization', 'KPI Reporting', 'Prompt Engineering',
+    'Project Management', 'Program Management', 'Product Management', 'Product Strategy', 'Stakeholder Management', 'Change Management',
+    'Operations Management', 'Supply Chain Management', 'Vendor Management', 'Strategic Planning', 'Business Analysis', 'Data Analysis',
+    'Data Science', 'Machine Learning', 'Deep Learning', 'Natural Language Processing', 'Computer Vision', 'Generative AI',
+    'Software Development', 'Backend Development', 'Frontend Development', 'Full-Stack Development', 'Mobile App Development',
+    'System Design', 'Cloud Architecture', 'DevOps', 'API Design', 'Microservices', 'Database Design', 'Cybersecurity',
+    'Quality Assurance', 'Test Automation', 'UX Design', 'UI Design', 'User Research', 'Design Systems', 'Prototyping',
+    'Digital Marketing', 'SEO', 'Content Marketing', 'Performance Marketing', 'Brand Management', 'Sales', 'B2B Sales',
+    'Key Account Management', 'Business Development', 'Customer Success', 'Financial Modelling', 'Financial Analysis',
+    'Accounting', 'Taxation', 'Auditing', 'Budgeting & Forecasting', 'Risk Management', 'Compliance', 'Contract Negotiation',
+    'Recruitment', 'Talent Management', 'Learning & Development', 'Team Leadership', 'Public Speaking', 'Lean Manufacturing',
+    'Inventory Management', 'Procurement', 'Logistics Planning', 'Python', 'Java', 'JavaScript', 'TypeScript', 'SQL', 'Go', 'C#', 'C++',
+  ],
+  tools: [
+    'Lean Six Sigma', 'PMP', 'Jira', 'Confluence', 'Asana', 'Trello', 'Notion', 'Slack', 'Microsoft Excel', 'Power BI', 'Tableau',
+    'Looker', 'Google Analytics', 'SAP', 'Oracle ERP', 'Salesforce', 'HubSpot', 'Zoho CRM', 'Tally', 'QuickBooks', 'Figma', 'Sketch',
+    'Adobe XD', 'Adobe Photoshop', 'Adobe Illustrator', 'Git', 'GitHub', 'GitLab', 'Docker', 'Kubernetes', 'Terraform', 'Jenkins',
+    'AWS', 'Microsoft Azure', 'Google Cloud', 'Linux', '.NET Core 8', 'Node.js', 'React', 'Next.js', 'Angular', 'Vue.js', 'Django',
+    'Flask', 'FastAPI', 'Spring Boot', 'SQL Server', 'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Kafka', 'Elasticsearch',
+    'TensorFlow', 'PyTorch', 'scikit-learn', 'Pandas', 'LangChain', 'Selenium', 'Postman',
+  ],
+  roles: [
+    'Chief Executive Officer (CEO)', 'Chief Operating Officer (COO)', 'Chief Technology Officer (CTO)', 'Chief Financial Officer (CFO)',
+    'Chief Product Officer (CPO)', 'Head of Transformation', 'Head of Operations', 'Head of Engineering', 'Head of Product',
+    'Vice President, Engineering', 'Director of Operations', 'Engineering Manager', 'Product Manager', 'Senior Product Manager',
+    'Program Manager', 'Project Manager', 'Operations Manager', 'Business Analyst', 'Data Analyst', 'Data Scientist',
+    'Machine Learning Engineer', 'AI Operations Specialist', 'Software Engineer', 'Senior Software Engineer', 'Backend Engineer',
+    'Frontend Engineer', 'Full-Stack Developer', 'DevOps Engineer', 'QA Engineer', 'UX Designer', 'Product Designer',
+    'Marketing Manager', 'Digital Marketing Manager', 'Sales Manager', 'Account Manager', 'Customer Success Manager',
+    'Finance Manager', 'Chartered Accountant', 'HR Manager', 'Talent Acquisition Specialist', 'Supply Chain Manager',
+  ],
+  locations: [
+    'Bengaluru', 'Mumbai', 'Delhi', 'New Delhi', 'Gurugram', 'Noida', 'Hyderabad', 'Chennai', 'Pune', 'Kolkata', 'Ahmedabad',
+    'Jaipur', 'Chandigarh', 'Kochi', 'Indore', 'Lucknow', 'Coimbatore', 'Bhubaneswar', 'Nagpur', 'Visakhapatnam', 'Remote (India)',
+    'Dubai', 'Singapore', 'London', 'New York', 'San Francisco', 'Toronto', 'Sydney',
+  ],
+  languages: [
+    'English', 'Hindi', 'Bengali', 'Marathi', 'Telugu', 'Tamil', 'Gujarati', 'Urdu', 'Kannada', 'Odia', 'Malayalam', 'Punjabi',
+    'Assamese', 'Sanskrit', 'French', 'German', 'Spanish', 'Arabic', 'Japanese', 'Mandarin', 'Russian', 'Portuguese', 'Italian', 'Korean',
+  ],
 };
 // Loose synonyms the extractor may emit → canonical enum value.
 const SYNONYMS = {
@@ -447,7 +578,20 @@ const SYNONYMS = {
 
 const ADDRESS_FIELDS = ['house_flat_building', 'street_area_locality', 'landmark', 'country', 'state', 'city', 'pincode'];
 const EDU_FIELDS = ['institute_name', 'degree', 'field_of_study', 'location', 'from_date', 'to_date', 'currently_studying_here', 'description'];
-const EXP_FIELDS = ['company_name', 'designation', 'employment_type', 'location', 'from_date', 'to_date', 'currently_working_here', 'description'];
+const EXP_FIELDS = ['company_name', 'designation', 'employment_type', 'location', 'from_date', 'to_date', 'currently_working_here', 'description', 'key_outcomes'];
+const SKILL_FIELDS = ['name', 'proficiency', 'years'];
+const LANG_FIELDS = ['language', 'proficiency'];
+const CERT_FIELDS = ['name', 'issuer', 'issue_date', 'expiry_date', 'does_not_expire', 'credential_url'];
+// Multi-value string fields shown as pills: [path, limit, enum options or null].
+const TAG_LISTS = [
+  ['education_and_experience.tools', LIMITS.tools, null],
+  ['education_and_experience.industry_clusters', LIMITS.industry, 'industry'],
+  ['education_and_experience.sub_domains', LIMITS.subDomains, null],
+  ['career_preferences.target_roles', LIMITS.roles, null],
+  ['career_preferences.work_modes', 3, 'workMode'],
+  ['career_preferences.preferred_locations', LIMITS.locations, null],
+];
+const TAG_LIMIT = Object.fromEntries(TAG_LISTS.map(([p, n]) => [p, n]));
 const TABS = { basic: 'basic_details', networking: 'networking', education: 'education_and_experience', career: 'career_preferences' };
 const SECTION_TAB = Object.fromEntries(Object.entries(TABS).map(([t, s]) => [s, t]));
 
@@ -456,10 +600,11 @@ const SCALAR_PATHS = [
   'basic_details.alternate_phone_number', 'basic_details.gender',
   ...ADDRESS_FIELDS.map(f => 'basic_details.primary_address.' + f),
   'networking.profession', 'networking.location', 'networking.date_of_birth', 'networking.tag_line', 'networking.about',
-  'career_preferences.mode', 'career_preferences.job_category', 'career_preferences.employment_type', 'career_preferences.work_mode',
+  'career_preferences.mode', 'career_preferences.job_category', 'career_preferences.employment_type',
   'career_preferences.preferred_country', 'career_preferences.preferred_state', 'career_preferences.preferred_city',
   'career_preferences.experience_years_min', 'career_preferences.experience_years_max',
   'career_preferences.salary_inr_per_year_min', 'career_preferences.salary_inr_per_year_max',
+  'career_preferences.open_to_relocation',
 ];
 
 /* ======================================================================
@@ -470,17 +615,26 @@ const blankItem = {
   'basic_details.additional_addresses': () => ({ ...emptyAddress(), set_as_default_address: false }),
   'networking.social_links': () => ({ platform: 'LinkedIn', url: null }),
   'education_and_experience.education': () => ({ institute_name: null, degree: null, field_of_study: null, location: null, from_date: null, to_date: null, currently_studying_here: false, description: null }),
-  'education_and_experience.experience': () => ({ company_name: null, designation: null, employment_type: null, location: null, from_date: null, to_date: null, currently_working_here: false, description: null }),
+  'education_and_experience.experience': () => ({ company_name: null, designation: null, employment_type: null, location: null, from_date: null, to_date: null, currently_working_here: false, description: null, key_outcomes: null }),
+  'education_and_experience.skills.primary': () => ({ name: null, proficiency: null, years: null }),
+  'education_and_experience.skills.secondary': () => ({ name: null, proficiency: null, years: null }),
+  'education_and_experience.languages': () => ({ language: null, proficiency: null }),
+  'education_and_experience.certifications': () => ({ name: null, issuer: null, issue_date: null, expiry_date: null, does_not_expire: false, credential_url: null }),
 };
 function defaultProfile() {
   return {
     basic_details: { first_name: null, middle_name: null, last_name: null, alternate_phone_number: null, gender: null, primary_address: emptyAddress(), additional_addresses: [] },
     networking: { profession: null, location: null, date_of_birth: null, tag_line: null, about: null, social_links: [] },
-    education_and_experience: { education: [], experience: [] },
+    education_and_experience: {
+      education: [], experience: [],
+      skills: { primary: [], secondary: [] }, tools: [], industry_clusters: [], sub_domains: [], languages: [], certifications: [],
+    },
     career_preferences: {
-      mode: 'Looking for Job', job_category: null, employment_type: null, work_mode: null,
+      mode: 'Looking for Job', job_category: null, employment_type: null,
       preferred_country: null, preferred_state: null, preferred_city: null,
       experience_years_min: null, experience_years_max: null, salary_inr_per_year_min: null, salary_inr_per_year_max: null,
+      target_roles: [], work_modes: [], preferred_locations: [], open_to_relocation: false,
+      resume_file_name: null, share_with_verified_recruiters: false, show_resume_on_public_profile: false,
     },
     profile_image: null,
   };
@@ -595,6 +749,18 @@ function normalizeProfile(raw) {
     };
   };
   const hasAny = (x, fields) => fields.some(f => !isEmpty(x[f]));
+  // De-duplicated short strings, from a list or a comma-separated string.
+  const tags = (v, limit, max = 80) => {
+    const list = Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : [];
+    const seen = new Set();
+    return list.map(t => str(t)).filter(t => t && t.length <= max && !seen.has(normKey(t)) && seen.add(normKey(t))).slice(0, limit);
+  };
+  // Achievements as "• " bullet lines, from a list or text.
+  const bullets = v => {
+    const lines = (Array.isArray(v) ? v : typeof v === 'string' ? v.split('\n') : [])
+      .map(l => (typeof l === 'string' ? l.replace(/^\s*[•\-*–·]+\s*/, '').trim() : '')).filter(Boolean);
+    return lines.length ? lines.map(l => '• ' + l).join('\n').slice(0, LIMITS.outcomes) : null;
+  };
 
   const b = obj(raw.basic_details), n = obj(raw.networking), ee = obj(raw.education_and_experience), c = obj(raw.career_preferences);
 
@@ -636,19 +802,69 @@ function normalizeProfile(raw) {
     company_name: str(e.company_name), designation: str(e.designation),
     employment_type: en(e.employment_type, ENUMS.expEmployment, 'Experience employment type'), location: str(e.location),
     ...period(e, 'currently_working_here', 'Experience'), description: str(e.description),
+    key_outcomes: bullets(e.key_outcomes),
   })).filter(e => e.company_name || e.designation);
   // keep the key order the UI expects
   o.education_and_experience.education = o.education_and_experience.education.map(e => pick(e, EDU_FIELDS));
   o.education_and_experience.experience = o.education_and_experience.experience.map(e => pick(e, EXP_FIELDS));
 
+  const E = o.education_and_experience;
+  const skillIn = s => (typeof s === 'string' || typeof s === 'number' ? { name: s } : s);
+  const skill = s => {
+    s = obj(skillIn(s));
+    const name = str(s.name, 80);
+    if (!name) return null;
+    const p = num(s.proficiency, true);
+    const y = num(s.years);
+    return { name, proficiency: p != null && p >= 1 && p <= 10 ? p : null, years: y != null && y <= 60 ? y : null };
+  };
+  const skillList = v => (Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : []).map(skill).filter(Boolean);
+  const rawSkills = ee.skills;
+  let primary = [], secondary = [];
+  if (Array.isArray(rawSkills) || typeof rawSkills === 'string') primary = skillList(rawSkills); // one ranked list
+  else { primary = skillList(obj(rawSkills).primary); secondary = skillList(obj(rawSkills).secondary); }
+  const seenSkill = new Set();
+  const fresh = s => !seenSkill.has(normKey(s.name)) && seenSkill.add(normKey(s.name));
+  primary = primary.filter(fresh); secondary = secondary.filter(fresh);
+  E.skills.primary = primary.slice(0, LIMITS.primary);
+  E.skills.secondary = [...primary.slice(LIMITS.primary), ...secondary].slice(0, LIMITS.secondary);
+  E.tools = tags(ee.tools, LIMITS.tools);
+  E.industry_clusters = tags(ee.industry_clusters, 20).map(v => matchEnum(v, ENUMS.industry)).filter((v, i, a) => v && a.indexOf(v) === i).slice(0, LIMITS.industry);
+  E.sub_domains = tags(ee.sub_domains, LIMITS.subDomains);
+  const seenLang = new Set();
+  E.languages = (Array.isArray(ee.languages) ? ee.languages : []).map(l => {
+    l = obj(typeof l === 'string' ? { language: l } : l);
+    const language = str(l.language, 40);
+    return language ? { language, proficiency: matchEnum(l.proficiency, ENUMS.langProf) } : null;
+  }).filter(l => l && !seenLang.has(normKey(l.language)) && seenLang.add(normKey(l.language))).slice(0, LIMITS.languages);
+  E.certifications = (Array.isArray(ee.certifications) ? ee.certifications : []).map(c => {
+    c = obj(typeof c === 'string' ? { name: c } : c);
+    const name = str(c.name);
+    if (!name) return null;
+    const noExpiry = c.does_not_expire === true;
+    return {
+      name, issuer: str(c.issuer), issue_date: date(c.issue_date, `${name} issue date`),
+      expiry_date: noExpiry ? null : date(c.expiry_date, `${name} expiry date`), does_not_expire: noExpiry, credential_url: str(c.credential_url),
+    };
+  }).filter(Boolean).slice(0, LIMITS.certifications);
+
   const C = o.career_preferences;
   C.mode = matchEnum(c.mode, ENUMS.mode) || 'Looking for Job';
   C.job_category = en(c.job_category, ENUMS.jobCategory, 'Job category');
   C.employment_type = en(c.employment_type, ENUMS.careerEmployment, 'Preferred employment type');
-  C.work_mode = en(c.work_mode, ENUMS.workMode, 'Work mode');
+  // work_modes is multi-select; the single work_mode (original schema) is folded in.
+  C.work_modes = [...tags(c.work_modes, 10), ...tags([c.work_mode], 1)]
+    .map(v => matchEnum(v, ENUMS.workMode)).filter((v, i, a) => v && a.indexOf(v) === i);
+  if (str(c.work_mode) && !matchEnum(c.work_mode, ENUMS.workMode)) warn.push(`Work mode: “${str(c.work_mode)}” isn't an available option. Please pick one.`);
   C.preferred_country = str(c.preferred_country); C.preferred_state = str(c.preferred_state); C.preferred_city = str(c.preferred_city);
   C.experience_years_min = num(c.experience_years_min); C.experience_years_max = num(c.experience_years_max);
   C.salary_inr_per_year_min = num(c.salary_inr_per_year_min, true); C.salary_inr_per_year_max = num(c.salary_inr_per_year_max, true);
+  C.target_roles = tags(c.target_roles, LIMITS.roles, 100);
+  C.preferred_locations = tags(c.preferred_locations, LIMITS.locations);
+  C.open_to_relocation = c.open_to_relocation === true;
+  C.resume_file_name = str(c.resume_file_name, 200);
+  C.share_with_verified_recruiters = c.share_with_verified_recruiters === true;
+  C.show_resume_on_public_profile = c.show_resume_on_public_profile === true;
   o.profile_image = typeof raw.profile_image === 'string' && raw.profile_image.startsWith('data:image/') ? raw.profile_image : null;
 
   return { data: o, warnings: warn };
@@ -663,7 +879,10 @@ const LISTS = [
   ['networking.social_links', s => (s.url ? normKey(String(s.url).replace(/^https?:\/\/(www\.)?/i, '').replace(/\/+$/, '')) : null), ['platform', 'url']],
   ['education_and_experience.education', e => (e.institute_name ? normKey(e.institute_name) + '|' + normKey(e.degree) : null), EDU_FIELDS],
   ['education_and_experience.experience', e => (e.company_name ? normKey(e.company_name) + '|' + normKey(e.designation) : null), EXP_FIELDS],
+  ['education_and_experience.languages', l => (l.language ? normKey(l.language) : null), LANG_FIELDS, LIMITS.languages, 'languages'],
+  ['education_and_experience.certifications', c => (c.name ? normKey(c.name) : null), CERT_FIELDS, LIMITS.certifications, 'certifications'],
 ];
+const LIST_LABEL = { 'basic_details.additional_addresses': 'additional addresses' };
 
 function applyExtraction(raw, { replace = false } = {}) {
   const { data: x, warnings } = normalizeProfile(raw || {});
@@ -692,14 +911,14 @@ function applyExtraction(raw, { replace = false } = {}) {
     photoFilled = true;
     filled++;
   }
-  for (const [ap, keyFn, fields, max] of LISTS) {
+  for (const [ap, keyFn, fields, max, label] of LISTS) {
     const list = getPath(state, ap);
     for (const item of getPath(x, ap)) {
       const k = keyFn(item);
       let idx = k ? list.findIndex(e => keyFn(e) === k) : -1;
       const fresh = idx === -1; // new rows only hold UI defaults, so extracted values always win
       if (fresh) {
-        if (max && list.length >= max) { warnings.push(`Only ${max} additional addresses are allowed; some were skipped.`); continue; }
+        if (max && list.length >= max) { warnings.push(`Only ${max} ${label || LIST_LABEL[ap]} are allowed; some were skipped.`); continue; }
         list.push(blankItem[ap]());
         idx = list.length - 1;
         aiItems.add(`${ap}.${idx}`);
@@ -707,6 +926,39 @@ function applyExtraction(raw, { replace = false } = {}) {
       for (const f of fields) put(`${ap}.${idx}.${f}`, item[f], fresh);
     }
   }
+
+  // Pills: add values not already present (never removes the user's own).
+  const addedTo = sec => { filled++; perSection[sec] = (perSection[sec] || 0) + 1; };
+  for (const [path, max] of TAG_LISTS) {
+    const list = getPath(state, path);
+    let skipped = false;
+    for (const v of getPath(x, path)) {
+      if (list.some(t => normKey(t) === normKey(v))) continue;
+      if (list.length >= max) { skipped = true; continue; }
+      list.push(v);
+      aiItems.add(`${path}.${list.length - 1}`);
+      aiPaths.add(path);
+      addedTo(path.split('.')[0]);
+    }
+    if (skipped) warnings.push(`Only ${max} values fit in ${path.split('.').pop().replace(/_/g, ' ')}; some were skipped.`);
+  }
+
+  // Skills: new ones go to primary while it has room, then to secondary.
+  const S = state.education_and_experience.skills;
+  const have = new Set([...S.primary, ...S.secondary].map(s => normKey(s.name)));
+  let skillsSkipped = false;
+  for (const [tier, s] of [...x.education_and_experience.skills.primary.map(s => ['primary', s]), ...x.education_and_experience.skills.secondary.map(s => ['secondary', s])]) {
+    if (have.has(normKey(s.name))) continue;
+    const target = tier === 'primary' && S.primary.length < LIMITS.primary ? 'primary' : S.secondary.length < LIMITS.secondary ? 'secondary' : null;
+    if (!target) { skillsSkipped = true; continue; }
+    S[target].push({ ...s });
+    have.add(normKey(s.name));
+    const base = `education_and_experience.skills.${target}`;
+    aiItems.add(`${base}.${S[target].length - 1}`);
+    aiPaths.add(`${base}.${S[target].length - 1}.name`);
+    addedTo('education_and_experience');
+  }
+  if (skillsSkipped) warnings.push(`Only ${LIMITS.primary} primary and ${LIMITS.secondary} secondary skills are allowed; some were skipped.`);
   fixups();
   return { filled, kept, photoFilled, warnings: [...new Set(warnings)], perSection };
 }
@@ -716,6 +968,7 @@ function fixups() {
   for (const [list, flag] of [['education_and_experience.education', 'currently_studying_here'], ['education_and_experience.experience', 'currently_working_here']]) {
     getPath(state, list).forEach(e => { if (e[flag]) e.to_date = null; });
   }
+  state.education_and_experience.certifications.forEach(c => { if (c.does_not_expire) c.expiry_date = null; });
   let seen = false;
   state.basic_details.additional_addresses.forEach(a => {
     if (a.set_as_default_address) { if (seen) a.set_as_default_address = false; seen = true; }
@@ -740,7 +993,7 @@ function F(path, label, o = {}) {
       control = `<select ${common}><option value="">${esc(o.placeholder || 'Select')}</option>${o.options.map(op => `<option${op === v ? ' selected' : ''}>${esc(op)}</option>`).join('')}</select>`;
       break;
     case 'textarea':
-      control = `<textarea ${common} rows="${o.rows || 4}" placeholder="${esc(o.placeholder || '')}"${o.maxLength ? ` maxlength="${o.maxLength}"` : ''}>${esc(v ?? '')}</textarea>`;
+      control = `<textarea ${common} rows="${o.rows || 4}" placeholder="${esc(o.placeholder || '')}"${o.maxLength ? ` maxlength="${o.maxLength}"` : ''}${o.bullets ? ' data-bullets="1"' : ''}>${esc(v ?? '')}</textarea>`;
       break;
     case 'date':
       control = `<input type="date" ${common} value="${esc(dmyToIso(v))}"${o.max ? ` max="${o.max}"` : ''}>`;
@@ -749,7 +1002,7 @@ function F(path, label, o = {}) {
       control = `<input type="number" inputmode="${o.int ? 'numeric' : 'decimal'}" ${common} value="${v ?? ''}" min="0" step="${o.step || 1}"${o.int ? ' data-int="1"' : ''} placeholder="${esc(o.placeholder || '')}">`;
       break;
     default:
-      control = `<input type="${o.type || 'text'}" ${common} value="${esc(v ?? '')}" placeholder="${esc(o.placeholder || '')}"${o.maxLength ? ` maxlength="${o.maxLength}"` : ''}${o.inputmode ? ` inputmode="${o.inputmode}"` : ''}>`;
+      control = `<input type="${o.type || 'text'}" ${common} value="${esc(v ?? '')}" placeholder="${esc(o.placeholder || '')}"${o.maxLength ? ` maxlength="${o.maxLength}"` : ''}${o.inputmode ? ` inputmode="${o.inputmode}"` : ''}${o.list ? ` list="dl-${o.list}" autocomplete="off"` : ''}>`;
   }
   return `<div class="field${o.span ? ' span-2' : ''}">
     <label for="${id}">${esc(label)}${o.required ? ' <span class="req" aria-hidden="true">*</span>' : ''}${ai ? AI_CHIP : ''}</label>
@@ -782,16 +1035,91 @@ function addressFields(base) {
     ${F(base + '.city', 'City', { placeholder: 'Enter city' })}
     ${F(base + '.pincode', 'Pincode', { placeholder: 'Enter your pincode', inputmode: 'numeric', maxLength: 10 })}`;
 }
-function itemCard(path, title, body) {
+function itemCard(path, title, body, badgeHtml = '') {
   const ai = aiItems.has(path);
   return `<div class="item${ai ? ' ai-item' : ''}">
     <div class="item-head">
-      <div class="item-title"><span>${esc(title)}</span>${ai ? AI_CHIP : ''}</div>
+      <div class="item-title"><span>${esc(title)}</span>${badgeHtml}${ai ? AI_CHIP : ''}</div>
       <button type="button" class="btn-icon" data-action="remove" data-path="${esc(path)}" aria-label="Remove ${esc(title)}" title="Remove">${TRASH}</button>
     </div>
     <div class="grid">${body}</div>
   </div>`;
 }
+/* Multi-value pills. Free text (with an optional suggestion list) or a fixed list of options. */
+function Pills(path, label, o = {}) {
+  const id = fid(path);
+  const values = getPath(state, path);
+  const max = TAG_LIMIT[path] || o.max || 10;
+  const full = values.length >= max;
+  const ai = aiPaths.has(path);
+  const pills = values.map((v, i) => `<span class="pill${aiItems.has(`${path}.${i}`) ? ' ai' : ''}"><span title="${esc(v)}">${esc(v)}</span><button type="button" data-action="pill-remove" data-path="${esc(path)}" data-i="${i}" aria-label="Remove ${esc(v)}">×</button></span>`).join('');
+  const entry = o.options
+    ? `<select id="${id}" data-pill="${esc(path)}" aria-label="Add ${esc(label)}"${full ? ' disabled' : ''}><option value="">${esc(o.placeholder || 'Select')}</option>${o.options.filter(op => !values.includes(op)).map(op => `<option>${esc(op)}</option>`).join('')}</select>`
+    : `<input id="${id}" type="text" data-pill="${esc(path)}" autocomplete="off"${o.list ? ` list="dl-${o.list}"` : ''} placeholder="${esc(full ? '' : values.length ? (o.more || 'Add more…') : (o.placeholder || 'Type and press Enter'))}" aria-label="Add ${esc(label)}" aria-describedby="${id}-hint"${full ? ' disabled' : ''} maxlength="${o.maxLength || 80}">`;
+  return `<div class="field${o.span === false ? '' : ' span-all'}">
+    <label for="${id}">${esc(label)}${ai ? AI_CHIP : ''}</label>
+    <div class="pills${ai ? ' ai-filled' : ''}" data-pills-for="${id}">${pills}${entry}<span class="pill-count">${values.length}/${max}</span></div>
+    <div class="hint" id="${id}-hint">${o.hint || (o.options ? 'Choose from the list.' : 'Press Enter or comma to add. Pick a suggestion or type your own.')}</div>
+  </div>`;
+}
+function tierLabel(n) { return n == null ? 'Not rated' : `${n}/10 · ${skillTier(n)}`; }
+function skillRows(tier) {
+  const base = `education_and_experience.skills.${tier}`;
+  const list = getPath(state, base);
+  const other = tier === 'primary' ? 'secondary' : 'primary';
+  const otherFull = getPath(state, `education_and_experience.skills.${other}`).length >= LIMITS[other];
+  const rows = list.map((s, i) => {
+    const p = `${base}.${i}`;
+    const unrated = s.proficiency == null;
+    const name = s.name || `Skill ${i + 1}`;
+    return `<div class="skill-row${aiItems.has(p) ? ' ai' : ''}">
+      <input class="input${aiPaths.has(p + '.name') ? ' ai-filled' : ''}" type="text" data-path="${p}.name" id="${fid(p + '.name')}" value="${esc(s.name ?? '')}" list="dl-skills" aria-label="Skill name" maxlength="80">
+      <div class="rating${unrated ? ' unrated' : ''}">
+        <input type="range" min="1" max="10" step="1" value="${s.proficiency ?? 5}" data-path="${p}.proficiency" id="${fid(p + '.proficiency')}" aria-label="${esc(name)} proficiency, 1 to 10" aria-valuetext="${esc(tierLabel(s.proficiency))}">
+        <span class="tier" data-tier-for="${p}.proficiency">${esc(tierLabel(s.proficiency))}</span>
+      </div>
+      <div class="years"><input class="input" type="number" min="0" max="60" step="0.5" inputmode="decimal" data-path="${p}.years" id="${fid(p + '.years')}" value="${s.years ?? ''}" placeholder="Years" aria-label="${esc(name)} years of experience"></div>
+      <div class="skill-actions">
+        <button type="button" class="btn-icon" data-action="skill-move" data-path="${p}" ${otherFull ? 'disabled' : ''} title="Move to ${other} skills" aria-label="Move ${esc(name)} to ${other} skills">${tier === 'primary' ? '↓' : '↑'}</button>
+        <button type="button" class="btn-icon" data-action="remove" data-path="${p}" title="Remove" aria-label="Remove ${esc(name)}">${TRASH}</button>
+      </div>
+    </div>`;
+  }).join('');
+  const full = list.length >= LIMITS[tier];
+  return `<div class="sub-block">
+    <div class="sub-head"><h4>${tier === 'primary' ? 'Primary Skills' : 'Secondary Skills'}</h4><span>${list.length} of ${LIMITS[tier]}${tier === 'primary' ? ' · your strongest' : ''}</span></div>
+    <div class="skill-list">${rows || `<div class="empty">No ${tier} skills yet.</div>`}</div>
+    <div class="skill-add">
+      <input class="input" type="text" id="skill-add-${tier}" data-skill-add="${tier}" list="dl-skills" autocomplete="off" maxlength="80" placeholder="${full ? `Limit of ${LIMITS[tier]} reached` : 'e.g. Six Sigma, Python, Agentic AI Workflows'}" aria-label="Add a ${tier} skill"${full ? ' disabled' : ''}>
+      <button type="button" class="btn btn-outline btn-sm" data-action="skill-add" data-tier="${tier}"${full ? ' disabled' : ''}>${PLUS} Add</button>
+    </div>
+  </div>`;
+}
+function Switch(path, title, sub) {
+  const id = fid(path);
+  const ai = aiPaths.has(path);
+  return `<label class="switch" for="${id}"><span class="switch-text"><b>${esc(title)}${ai ? AI_CHIP : ''}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>
+    <input type="checkbox" role="switch" id="${id}" data-path="${esc(path)}"${getPath(state, path) ? ' checked' : ''}><span class="switch-ui" aria-hidden="true"></span></label>`;
+}
+function MultiCheck(path, label, options) {
+  const values = getPath(state, path);
+  const ai = aiPaths.has(path);
+  return `<fieldset class="field span-all"><legend>${esc(label)}${ai ? AI_CHIP : ''}</legend>
+    <div class="checks-row">${options.map((op, i) => {
+      const id = `${fid(path)}-${i}`;
+      return `<label class="check" for="${id}"><input type="checkbox" id="${id}" data-multi="${esc(path)}" value="${esc(op)}"${values.includes(op) ? ' checked' : ''}><span>${esc(op)}</span></label>`;
+    }).join('')}</div></fieldset>`;
+}
+function certStatus(c) {
+  if (c.does_not_expire) return '<span class="badge ok">No expiry</span>';
+  const exp = dmyToIso(c.expiry_date);
+  if (!exp) return '';
+  const days = (new Date(exp) - new Date(today())) / 86400000;
+  if (days < 0) return '<span class="badge bad">Expired</span>';
+  if (days <= 90) return '<span class="badge warn">Expires soon</span>';
+  return '<span class="badge ok">Valid</span>';
+}
+
 const TRASH = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>';
 const PLUS = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 function sectionHead(title, sub, action) {
@@ -902,8 +1230,68 @@ function renderEducation() {
           ${F(p + '.employment_type', 'Employment Type', { type: 'select', options: ENUMS.expEmployment, placeholder: 'Select employment type' })}
           ${F(p + '.location', 'Location', { placeholder: 'e.g. Gurgaon' })}
           ${periodFields(p, 'currently_working_here', 'I am currently working here')}
-          ${F(p + '.description', 'Description', { type: 'textarea', rows: 3, placeholder: 'Responsibilities, impact, tools…', span: true })}`);
+          ${F(p + '.description', 'Description', { type: 'textarea', rows: 3, placeholder: 'Responsibilities, impact, tools…', span: true })}
+          ${F(p + '.key_outcomes', 'Key Outcomes & Achievements', { type: 'textarea', rows: 4, span: true, maxLength: LIMITS.outcomes, bullets: true,
+            placeholder: '• Reduced operational turnaround time by 35% across 3 regional dark stores.',
+            hint: `Lead with a number: %, ₹, time saved, team size. Aim for 300–500 characters. <span class="count" data-count-for="${p}.key_outcomes">${(e.key_outcomes || '').length}</span> / ${LIMITS.outcomes}` })}`);
       }).join('') : '<div class="empty">No experience added yet.</div>'}
+    </div>
+  </section>
+  ${renderSkills()}
+  <section class="card section">
+    ${sectionHead('Tools, Frameworks & Systems', 'Software, platforms and methodologies you work with.')}
+    <div class="grid">${Pills('education_and_experience.tools', 'Tools & Frameworks', { list: 'tools', placeholder: 'e.g. Lean Six Sigma, PMP, .NET Core 8, Next.js, SQL Server' })}</div>
+  </section>
+  <section class="card section">
+    ${sectionHead('Industry & Domain', 'Helps recruiters find you by sector and niche.')}
+    <div class="grid">
+      ${Pills('education_and_experience.industry_clusters', 'Industry Clusters', { options: ENUMS.industry, placeholder: 'Add an industry…', hint: `Broad sectors from a standard list. Up to ${LIMITS.industry}.` })}
+      ${Pills('education_and_experience.sub_domains', 'Sub-Domains & Niche Fields', { placeholder: 'e.g. B2B SaaS, Quick Commerce, Hyperlocal Logistics', hint: 'Your own words for the specific niches you know. Press Enter or comma to add.' })}
+    </div>
+  </section>
+  ${renderLanguages()}
+  ${renderCertifications()}`;
+}
+
+function renderSkills() {
+  return `<section class="card section">
+    ${sectionHead('Skills & Proficiency', 'Rate each skill from 1 to 10 and add your years of experience.')}
+    <div class="tier-legend" aria-label="Rating scale"><span><b>1–3</b> Basic</span><span><b>4–6</b> Intermediate</span><span><b>7–8</b> Advanced</span><span><b>9–10</b> Master</span></div>
+    ${skillRows('primary')}
+    ${skillRows('secondary')}
+  </section>`;
+}
+function renderLanguages() {
+  const langs = state.education_and_experience.languages;
+  return `<section class="card section">
+    ${sectionHead('Language Proficiency', `${langs.length} of ${LIMITS.languages} added`, addBtn('education_and_experience.languages', 'Add Language', langs.length >= LIMITS.languages))}
+    <div class="items">
+      ${langs.length ? langs.map((l, i) => {
+        const p = `education_and_experience.languages.${i}`;
+        return `<div class="lang-row">
+          ${F(p + '.language', 'Language', { required: true, placeholder: 'e.g. English', list: 'languages' })}
+          ${F(p + '.proficiency', 'Proficiency', { type: 'select', options: ENUMS.langProf, placeholder: 'Select proficiency' })}
+          <button type="button" class="btn-icon" style="margin-top:27px" data-action="remove" data-path="${p}" aria-label="Remove language ${i + 1}" title="Remove">${TRASH}</button>
+        </div>`;
+      }).join('') : '<div class="empty">No languages added yet.</div>'}
+    </div>
+  </section>`;
+}
+function renderCertifications() {
+  const certs = state.education_and_experience.certifications;
+  return `<section class="card section">
+    ${sectionHead('Professional Certifications', `${certs.length} of ${LIMITS.certifications} added`, addBtn('education_and_experience.certifications', 'Add Certification', certs.length >= LIMITS.certifications))}
+    <div class="items">
+      ${certs.length ? certs.map((c, i) => {
+        const p = `education_and_experience.certifications.${i}`;
+        return itemCard(p, c.name || `Certification ${i + 1}`, `
+          ${F(p + '.name', 'Certification Name', { required: true, placeholder: 'e.g. PMP, AWS Solutions Architect' })}
+          ${F(p + '.issuer', 'Issuing Organisation', { placeholder: 'e.g. PMI, Amazon Web Services' })}
+          ${F(p + '.issue_date', 'Issue Date', { type: 'date', max: today() })}
+          ${F(p + '.expiry_date', 'Expiry Date', { type: 'date', disabled: c.does_not_expire, hint: c.does_not_expire ? 'Does not expire' : undefined })}
+          <div class="field span-2">${Check(p + '.does_not_expire', 'This certification does not expire')}</div>
+          ${F(p + '.credential_url', 'Credential URL', { type: 'url', placeholder: 'https://', inputmode: 'url', span: true })}`, certStatus(c));
+      }).join('') : '<div class="empty">No certifications added yet.</div>'}
     </div>
   </section>`;
 }
@@ -923,18 +1311,21 @@ function renderCareer() {
     <div class="grid">
       ${F('career_preferences.job_category', 'Job Category', { type: 'select', options: ENUMS.jobCategory, placeholder: 'Select job category', required: true })}
       ${F('career_preferences.employment_type', 'Employment Type', { type: 'select', options: ENUMS.careerEmployment, placeholder: 'Select employment type' })}
-      ${F('career_preferences.work_mode', 'Work Mode', { type: 'select', options: ENUMS.workMode, placeholder: 'Select work mode' })}
-      <div></div>
+      ${Pills('career_preferences.target_roles', 'Target Roles & Job Titles', { list: 'roles', placeholder: 'e.g. Chief Operating Officer (COO), Head of Transformation', hint: 'Pick standard titles or type an emerging one. Press Enter to add.' })}
     </div>
   </section>
   <section class="card section">
-    ${sectionHead('Preferred Location')}
+    ${sectionHead('Work Preferences & Location', 'Recruiters filter on these.')}
     <div class="grid cols-3">
+      ${MultiCheck('career_preferences.work_modes', 'Work Mode', ENUMS.workMode)}
       ${F('career_preferences.preferred_country', 'Country', { placeholder: 'Enter country' })}
       ${F('career_preferences.preferred_state', 'State', { placeholder: 'Enter state' })}
       ${F('career_preferences.preferred_city', 'City', { placeholder: 'Enter city' })}
+      ${Pills('career_preferences.preferred_locations', 'Other Preferred Locations', { list: 'locations', placeholder: 'e.g. Bengaluru, Gurugram' })}
     </div>
+    ${Switch('career_preferences.open_to_relocation', 'Open to relocation', 'Show recruiters you would move for the right role.')}
   </section>
+  ${renderSharing()}
   <section class="card section">
     ${sectionHead('Experience & Salary')}
     <div class="grid">
@@ -946,9 +1337,31 @@ function renderCareer() {
   </section>`;
 }
 
+function renderSharing() {
+  const C = state.career_preferences;
+  const file = C.resume_file_name;
+  return `<section class="card section">
+    ${sectionHead('Resume & Recruiter Sharing', 'Control who can see your resume.')}
+    <div class="resume-file">
+      <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--brand);flex:none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+      <div class="name">${file ? esc(file) : 'No resume attached'}<small>${file ? 'Attached to your profile' : 'PDF, DOC or DOCX · up to ' + CONFIG.maxResumeMb + ' MB'}</small></div>
+      <label class="btn btn-outline btn-sm" for="resumeAttach" style="cursor:pointer">${file ? 'Replace' : 'Attach resume'}</label>
+      ${file ? '<button type="button" class="btn btn-ghost btn-sm" data-action="resume-remove">Remove</button>' : ''}
+    </div>
+    ${Switch('career_preferences.share_with_verified_recruiters', 'Share with verified recruiters', 'Recruiters verified by BONC can view and download your resume.')}
+    ${Switch('career_preferences.show_resume_on_public_profile', 'Show resume on my public profile', 'Anyone who views your profile can download it.')}
+  </section>`;
+}
+
 const RENDERERS = { basic: renderBasic, networking: renderNetworking, education: renderEducation, career: renderCareer };
+let rendering = false; // Chrome fires focusout on the focused element when innerHTML removes it
 function renderForms() {
-  for (const [tab, fn] of Object.entries(RENDERERS)) document.getElementById('panel-' + tab).innerHTML = fn();
+  rendering = true;
+  try {
+    for (const [tab, fn] of Object.entries(RENDERERS)) document.getElementById('panel-' + tab).innerHTML = fn();
+  } finally {
+    rendering = false;
+  }
   updateChrome();
 }
 
@@ -975,7 +1388,9 @@ function updateSummary() {
     B.first_name, B.last_name, B.gender, B.alternate_phone_number, B.primary_address.city, B.primary_address.pincode,
     N.profession, N.location, N.date_of_birth, N.tag_line, N.about, N.social_links.length,
     state.education_and_experience.education.length, state.education_and_experience.experience.length,
-    state.career_preferences.job_category, state.career_preferences.work_mode, state.career_preferences.employment_type,
+    state.education_and_experience.skills.primary.length, state.education_and_experience.languages.length,
+    state.career_preferences.job_category, state.career_preferences.work_modes.length, state.career_preferences.employment_type,
+    state.career_preferences.target_roles.length, state.career_preferences.resume_file_name,
   ];
   const pct = Math.round(100 * checks.filter(v => !isEmpty(v) && v !== 0).length / checks.length);
   document.getElementById('sumPct').textContent = pct + '%';
@@ -1030,10 +1445,19 @@ const form = document.getElementById('profileForm');
 
 function onFieldInput(e) {
   const el = e.target;
+  if (el.dataset.multi && e.type === 'change') { toggleMulti(el); return; }
+  if (el.dataset.pill && el.tagName === 'SELECT' && e.type === 'change') { if (el.value) addPill(el.dataset.pill, el.value); return; }
   const path = el.dataset.path;
   if (!path) return;
   let v;
-  if (el.type === 'checkbox') v = el.checked;
+  if (el.type === 'range') {
+    v = +el.value;
+    const tier = document.querySelector(`[data-tier-for="${CSS.escape(path)}"]`);
+    if (tier) tier.textContent = tierLabel(v);
+    el.setAttribute('aria-valuetext', tierLabel(v));
+    el.closest('.rating')?.classList.remove('unrated');
+  }
+  else if (el.type === 'checkbox') v = el.checked;
   else if (el.type === 'radio') { if (!el.checked) return; v = el.value; }
   else if (el.type === 'date') v = el.value ? isoToDmy(el.value) : null;
   else if (el.type === 'number') v = el.value === '' || !Number.isFinite(+el.value) ? null : (el.dataset.int ? Math.round(+el.value) : +el.value);
@@ -1061,6 +1485,7 @@ function onFieldInput(e) {
       });
     }
     if (v && /currently_(working|studying)_here$/.test(path)) setPath(state, path.replace(/currently_\w+$/, 'to_date'), null);
+    if (v && path.endsWith('.does_not_expire')) setPath(state, path.replace(/does_not_expire$/, 'expiry_date'), null);
     rerenderKeepFocus(el.id);
   } else {
     updateChrome();
@@ -1105,14 +1530,160 @@ form.addEventListener('click', e => {
   } else if (btn.dataset.action === 'remove') {
     const path = btn.dataset.path;
     const cut = path.lastIndexOf('.');
-    const list = path.slice(0, cut), idx = +path.slice(cut + 1);
-    getPath(state, list).splice(idx, 1);
-    aiPaths = reindex(aiPaths, list, idx);
-    aiItems = reindex(aiItems, list, idx);
-    errors = {}; // indices moved; re-validated on next save
+    removeAt(path.slice(0, cut), +path.slice(cut + 1));
+    renderForms();
+  } else if (btn.dataset.action === 'pill-remove') {
+    const path = btn.dataset.path;
+    removeAt(path, +btn.dataset.i);
+    if (!getPath(state, path).length) aiPaths.delete(path);
+    rerenderKeepFocus(fid(path));
+  } else if (btn.dataset.action === 'skill-add') {
+    addSkill(btn.dataset.tier);
+  } else if (btn.dataset.action === 'skill-move') {
+    moveSkill(btn.dataset.path);
+  } else if (btn.dataset.action === 'resume-remove') {
+    state.career_preferences.resume_file_name = null;
     markDirty();
     renderForms();
   }
+});
+
+function removeAt(list, idx) {
+  getPath(state, list).splice(idx, 1);
+  aiPaths = reindex(aiPaths, list, idx);
+  aiItems = reindex(aiItems, list, idx);
+  errors = {}; // indices moved; re-validated on next save
+  markDirty();
+}
+
+/* ---------- Pills ---------- */
+function addPill(path, raw, focusId = fid(path)) {
+  const list = getPath(state, path);
+  const enumKey = TAG_LISTS.find(([p]) => p === path)?.[2];
+  let added = false;
+  // Fixed options can contain commas ("Banking, Financial Services & Insurance"): add them whole.
+  for (let v of enumKey ? [String(raw)] : String(raw).split(',')) {
+    v = v.trim().replace(/\s+/g, ' ');
+    if (!v) continue;
+    if (enumKey) v = matchEnum(v, ENUMS[enumKey]);
+    if (!v || list.some(t => normKey(t) === normKey(v))) continue;
+    if (list.length >= TAG_LIMIT[path]) { toast(`You can add up to ${TAG_LIMIT[path]}.`, true); break; }
+    list.push(v.slice(0, 100));
+    added = true;
+  }
+  if (added) markDirty();
+  rerenderKeepFocus(focusId);
+}
+function toggleMulti(el) {
+  const path = el.dataset.multi;
+  const list = getPath(state, path);
+  const i = list.indexOf(el.value);
+  if (el.checked && i === -1) list.push(el.value);
+  if (!el.checked && i !== -1) list.splice(i, 1);
+  // keep the canonical order so the first one is the main mode
+  const order = ENUMS.workMode;
+  list.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  aiPaths.delete(path);
+  markDirty();
+  rerenderKeepFocus(el.id);
+}
+form.addEventListener('keydown', e => {
+  const el = e.target;
+  if (el.dataset.pill && el.tagName === 'INPUT') {
+    if ((e.key === 'Enter' || e.key === ',') && el.value.trim()) { e.preventDefault(); addPill(el.dataset.pill, el.value); }
+    else if (e.key === 'Enter') e.preventDefault();
+    else if (e.key === 'Backspace' && !el.value) {
+      const list = getPath(state, el.dataset.pill);
+      if (list.length) { removeAt(el.dataset.pill, list.length - 1); rerenderKeepFocus(el.id); }
+    }
+  } else if (el.dataset.skillAdd && e.key === 'Enter') {
+    e.preventDefault();
+    addSkill(el.dataset.skillAdd);
+  } else if (el.dataset.bullets && e.key === 'Enter' && !e.shiftKey) {
+    // Achievements: Enter starts a new "• " bullet.
+    e.preventDefault();
+    const { selectionStart: s, selectionEnd: t, value } = el;
+    const ins = '\n• ';
+    if (el.maxLength > 0 && value.length - (t - s) + ins.length > el.maxLength) return;
+    el.setRangeText(ins, s, t, 'end');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+});
+form.addEventListener('focusin', e => {
+  const el = e.target;
+  if (el.dataset.bullets && !el.value) { el.value = '• '; el.setSelectionRange(2, 2); }
+});
+form.addEventListener('focusout', e => {
+  if (rendering) return;
+  const el = e.target;
+  if (el.dataset.pill && el.tagName === 'INPUT' && el.value.trim()) {
+    // Add what was typed when leaving the field, unless focus moved within the same pill box.
+    const v = el.value; el.value = '';
+    const path = el.dataset.pill;
+    // Re-render after focus has moved, and keep it where the user put it.
+    setTimeout(() => addPill(path, v, document.activeElement?.id || null), 0);
+  } else if (el.dataset.bullets && el.value.trim() === '•') {
+    el.value = '';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+});
+form.addEventListener('click', e => {
+  // Clicking the empty part of a pill box focuses its input.
+  const box = e.target.closest('.pills');
+  if (box && e.target === box) document.getElementById(box.dataset.pillsFor)?.focus();
+});
+
+/* ---------- Skills ---------- */
+function addSkill(tier) {
+  const input = document.getElementById('skill-add-' + tier);
+  const names = (input?.value || '').split(',').map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  if (!names.length) { input?.focus(); return; }
+  const S = state.education_and_experience.skills;
+  const have = new Set([...S.primary, ...S.secondary].map(s => normKey(s.name)));
+  let dup = 0, full = false;
+  for (const name of names) {
+    if (have.has(normKey(name))) { dup++; continue; }
+    if (S[tier].length >= LIMITS[tier]) { full = true; break; }
+    S[tier].push({ name: name.slice(0, 80), proficiency: null, years: null });
+    have.add(normKey(name));
+  }
+  if (full) toast(`You can add up to ${LIMITS[tier]} ${tier} skills.`, true);
+  else if (dup) toast(dup === names.length ? 'That skill is already on your profile.' : 'Skipped skills already on your profile.');
+  markDirty();
+  rerenderKeepFocus('skill-add-' + tier);
+}
+function moveSkill(path) {
+  const m = /skills\.(primary|secondary)\.(\d+)$/.exec(path);
+  if (!m) return;
+  const [, from, idx] = m;
+  const to = from === 'primary' ? 'secondary' : 'primary';
+  const S = state.education_and_experience.skills;
+  if (S[to].length >= LIMITS[to]) { toast(`You can add up to ${LIMITS[to]} ${to} skills.`, true); return; }
+  const [item] = S[from].splice(+idx, 1);
+  aiPaths = reindex(aiPaths, `education_and_experience.skills.${from}`, +idx);
+  aiItems = reindex(aiItems, `education_and_experience.skills.${from}`, +idx);
+  to === 'primary' ? S.primary.push(item) : S.secondary.unshift(item);
+  if (to === 'secondary') { // shifted every secondary index by one
+    const shift = set => new Set([...set].map(p => p.replace(/^(education_and_experience\.skills\.secondary\.)(\d+)/, (_, a, n) => a + (+n + 1))));
+    aiPaths = shift(aiPaths); aiItems = shift(aiItems);
+  }
+  errors = {};
+  markDirty();
+  renderForms();
+}
+
+/* ---------- Resume attachment (no autofill) ---------- */
+document.getElementById('resumeAttach').addEventListener('change', e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!['pdf', 'doc', 'docx'].includes(ext)) { toast('Attach a PDF, DOC or DOCX resume.', true); return; }
+  if (file.size > CONFIG.maxResumeMb * 1024 * 1024) { toast(`The file is larger than ${CONFIG.maxResumeMb} MB.`, true); return; }
+  state.career_preferences.resume_file_name = file.name;
+  markDirty();
+  renderForms();
+  toast('Resume attached. Save to keep it.');
 });
 
 document.querySelector('.tabs').addEventListener('click', e => {
@@ -1178,6 +1749,18 @@ function validate() {
     before(p + '.from_date', p + '.to_date', 'End date must be after the start date.');
   });
 
+  const E = state.education_and_experience;
+  for (const tier of ['primary', 'secondary']) {
+    E.skills[tier].forEach((_, i) => need(`education_and_experience.skills.${tier}.${i}.name`, 'Enter the skill name or remove it.'));
+  }
+  E.languages.forEach((_, i) => need(`education_and_experience.languages.${i}.language`, 'Enter a language or remove it.'));
+  E.certifications.forEach((c, i) => {
+    const p = `education_and_experience.certifications.${i}`;
+    need(p + '.name', 'Certification name is required.');
+    before(p + '.issue_date', p + '.expiry_date', 'Expiry date must be after the issue date.');
+    if (c.credential_url && !/^(https?:\/\/)?[^\s/$.?#]+\.[^\s]+$/i.test(c.credential_url)) errs[p + '.credential_url'] = 'Enter a valid URL.';
+  });
+
   const C = state.career_preferences;
   need('career_preferences.job_category', 'Choose a job category.');
   if (C.experience_years_min != null && C.experience_years_max != null && C.experience_years_min > C.experience_years_max)
@@ -1204,6 +1787,10 @@ function getData() {
   for (const e of out.education_and_experience.education) { e.institute_name ??= ''; e.degree ??= ''; e.currently_studying_here = !!e.currently_studying_here; }
   for (const e of out.education_and_experience.experience) { e.company_name ??= ''; e.designation ??= ''; e.currently_working_here = !!e.currently_working_here; }
   for (const a of out.basic_details.additional_addresses) a.set_as_default_address = !!a.set_as_default_address;
+  for (const c of out.education_and_experience.certifications) c.does_not_expire = !!c.does_not_expire;
+  const C = out.career_preferences;
+  C.work_mode = C.work_modes[0] ?? null; // the original single-value field, for existing consumers
+  for (const k of ['open_to_relocation', 'share_with_verified_recruiters', 'show_resume_on_public_profile']) C[k] = !!C[k];
   return out;
 }
 
@@ -1402,6 +1989,8 @@ function handleExtracted(data, fileName) {
   }
   const snapshot = { state: clone(state), ai: new Set(aiPaths), items: new Set(aiItems), errors: { ...errors }, dirty };
   const res = applyExtraction(raw, { replace: els.replace.checked });
+  // The uploaded resume becomes the profile's resume unless one is already attached.
+  if (res.filled > 0 && fileName && !state.career_preferences.resume_file_name) state.career_preferences.resume_file_name = fileName;
   if (res.filled === 0) {
     renderResult({
       kind: 'info',
@@ -1475,14 +2064,20 @@ const SAMPLE = {
   education_and_experience: {
     education: [{ institute_name: 'Delhi Technological University', degree: 'B.Tech', field_of_study: 'Computer Engineering', location: 'New Delhi', from_date: '2013-08', to_date: 'May 2017', currently_studying_here: false, description: null }],
     experience: [
-      { company_name: 'Nimbus Commerce', designation: 'Senior Software Engineer', employment_type: 'Full Time', location: 'Gurgaon', from_date: '01-04-2021', to_date: null, currently_working_here: true, description: 'Lead the payments and invoicing services; cut settlement time by 40%.' },
-      { company_name: 'Quanta Labs', designation: 'Software Engineer', employment_type: 'Full-time', location: 'Noida', from_date: '01-07-2017', to_date: '31-03-2021', currently_working_here: false, description: 'Built supplier onboarding and search APIs.' },
+      { company_name: 'Nimbus Commerce', designation: 'Senior Software Engineer', employment_type: 'Full Time', location: 'Gurgaon', from_date: '01-04-2021', to_date: null, currently_working_here: true, description: 'Lead the payments and invoicing services; cut settlement time by 40%.',
+        key_outcomes: ['Cut settlement time by 40% for 1,200 merchants.', 'Led a team of 5 engineers through the payments re-platform.'] },
+      { company_name: 'Quanta Labs', designation: 'Software Engineer', employment_type: 'Full-time', location: 'Noida', from_date: '01-07-2017', to_date: '31-03-2021', currently_working_here: false, description: 'Built supplier onboarding and search APIs.', key_outcomes: null },
     ],
+    skills: { primary: [{ name: 'Python', proficiency: null, years: null }, { name: 'System Design' }, { name: 'Payments' }, { name: 'PostgreSQL' }, { name: 'API Design' }], secondary: [{ name: 'TypeScript' }, { name: 'Kafka' }] },
+    tools: ['Docker', 'Kubernetes', 'AWS', 'Git'],
+    languages: [{ language: 'English', proficiency: 'Fluent' }, { language: 'Hindi', proficiency: 'Native / Bilingual' }],
+    certifications: [{ name: 'AWS Certified Solutions Architect – Associate', issuer: 'Amazon Web Services', issue_date: 'Mar 2023', expiry_date: 'Mar 2026', credential_url: null }],
   },
   career_preferences: {
     mode: 'Looking for Job', job_category: 'Information Technology', employment_type: 'Full-Time', work_mode: 'Hybrid',
     preferred_country: 'India', preferred_state: 'Haryana', preferred_city: 'Gurgaon',
     experience_years_min: 5, experience_years_max: 8, salary_inr_per_year_min: 2400000, salary_inr_per_year_max: 3200000,
+    target_roles: ['Senior Software Engineer', 'Engineering Manager'],
   },
 };
 
@@ -1490,6 +2085,8 @@ const SAMPLE = {
    Boot
    ====================================================================== */
 (function init() {
+  document.getElementById('datalists').innerHTML = Object.entries(SUGGEST)
+    .map(([k, list]) => `<datalist id="dl-${k}">${list.map(v => `<option value="${esc(v)}"></option>`).join('')}</datalist>`).join('');
   try {
     const draft = JSON.parse(localStorage.getItem(CONFIG.draftKey) || 'null');
     if (draft && typeof draft === 'object') { state = normalizeProfile(draft).data; fixups(); }
