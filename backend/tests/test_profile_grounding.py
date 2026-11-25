@@ -118,3 +118,99 @@ def test_misspelt_link_replaced_by_the_resumes_link_on_the_same_site():
         text,
     )
     assert [s.url for s in p.networking.social_links] == ["https://linkedin.com/in/priya-nair-example"]
+
+
+WORK_TEXT = """SKILLS
+Python, Django, PostgreSQL, Six Sigma
+TOOLS Jira, Git
+LANGUAGES English (fluent), Hindi (native)
+CERTIFICATIONS AWS Certified Solutions Architect - Associate (2023)
+EXPERIENCE
+ShipFast Logistics - Senior Backend Engineer
+Scaled order-tracking APIs to 2M requests/day.
+Cut cloud spend by 30% with autoscaling.
+Paynest - Intern
+Built reconciliation scripts for UPI transactions.
+"""
+
+
+def test_key_outcomes_keep_only_the_roles_own_bullets():
+    p = ground_profile(
+        _profile(education_and_experience={"experience": [
+            {"company_name": "ShipFast Logistics", "key_outcomes":
+                "• Scaled order-tracking APIs to 2M requests/day.\n"
+                "• Built reconciliation scripts for UPI transactions.\n"  # belongs to Paynest
+                "• Collaborated with stakeholders to ensure delivery excellence\n"  # invented filler
+                "- Cut cloud spend by 30% with autoscaling"},
+            {"company_name": "Paynest", "key_outcomes": "• Built reconciliation scripts for UPI transactions."},
+            {"company_name": "Not In Resume Ltd", "key_outcomes": "• Something"},
+        ]}),
+        WORK_TEXT,
+    )
+    exp = p.education_and_experience.experience
+    assert exp[0].key_outcomes == "• Scaled order-tracking APIs to 2M requests/day.\n• Cut cloud spend by 30% with autoscaling"
+    assert exp[1].key_outcomes == "• Built reconciliation scripts for UPI transactions."
+    assert exp[2].key_outcomes is None
+
+
+def test_skills_tools_languages_and_certifications_must_appear_in_resume():
+    p = ground_profile(
+        _profile(
+            education_and_experience={
+                "skills": ["Python", "Kubernetes", "Django", "PostgreSQL", "Leadership", "Six Sigma", "C"],
+                "tools": ["Jira", "Confluence", "git"],
+                "languages": ["English", "French", "Python", {"language": "Hindi", "proficiency": "native"}],
+                "certifications": ["AWS Certified Solutions Architect Associate", "PMP"],
+            },
+            career_preferences={"target_roles": ["Senior Backend Engineer", "Chief Executive Officer"]},
+        ),
+        WORK_TEXT,
+    )
+    ee = p.education_and_experience
+    # Invented primary skills are dropped and secondary skills move up to keep five.
+    assert [s.name for s in ee.skills.primary] == ["Python", "Django", "PostgreSQL", "Six Sigma", "C"]
+    assert ee.skills.secondary == []
+    assert ee.tools == ["Jira", "git"]
+    assert [(lang.language, lang.proficiency) for lang in ee.languages] == [("English", None), ("Hindi", "Native / Bilingual")]
+    assert [c.name for c in ee.certifications] == ["AWS Certified Solutions Architect Associate"]
+    assert p.career_preferences.target_roles == ["Senior Backend Engineer"]
+
+
+def test_middle_initial_expanded_from_heading():
+    p = ground_profile(_profile(basic_details={"first_name": "Meera", "middle_name": "A", "last_name": "Iyer"}), "Meera Anand Iyer\nOperations Leader")
+    assert (p.basic_details.first_name, p.basic_details.middle_name, p.basic_details.last_name) == ("Meera", "Anand", "Iyer")
+
+
+def test_split_skill_rejoined_only_when_written_as_one_phrase():
+    text = "SKILLS\nSix Sigma, Agentic AI Workflows, KPI Reporting\nPython\nDjango\n"
+    p = ground_profile(
+        _profile(education_and_experience={"skills": ["Six Sigma", "Agentic AI", "Workflows", "KPI Reporting", "Python", "Django"]}),
+        text,
+    )
+    s = p.education_and_experience.skills
+    assert [x.name for x in s.primary] == ["Six Sigma", "Agentic AI Workflows", "KPI Reporting", "Python", "Django"]
+    assert s.secondary == []
+
+
+def test_certification_issuer_suffix_and_no_expiry():
+    text = "CERTIFICATIONS\nLean Six Sigma Black Belt - ASQ (2019, no expiry)\nPMP - Project Management Institute (expires Mar 2025)\n"
+    p = ground_profile(
+        _profile(education_and_experience={"certifications": [
+            {"name": "Lean Six Sigma Black Belt - ASQ", "issuer": "ASQ", "issue_date": "2019"},
+            {"name": "PMP - Project Management Institute", "issuer": "Project Management Institute"},
+        ]}),
+        text,
+    )
+    certs = p.education_and_experience.certifications
+    assert [(c.name, c.does_not_expire) for c in certs] == [("Lean Six Sigma Black Belt", True), ("PMP", False)]
+
+
+
+def test_skill_split_by_a_wrapped_list_line_is_rejoined():
+    # A comma list long enough to hit the page width, wrapped mid-skill.
+    text = "SKILLS\nKPI Reporting, Supply Chain Management, Vendor Management, Agentic AI\nWorkflows\nTOOLS\nSAP\n"
+    p = ground_profile(
+        _profile(education_and_experience={"skills": ["KPI Reporting", "Agentic AI", "Workflows", "Supply Chain Management"]}), text
+    )
+    names = [x.name for x in p.education_and_experience.skills.primary]
+    assert names == ["KPI Reporting", "Agentic AI Workflows", "Supply Chain Management"]

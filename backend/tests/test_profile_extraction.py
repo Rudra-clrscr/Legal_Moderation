@@ -702,3 +702,37 @@ def test_short_closing_page_keeps_text_layer(tmp_path):
     assert "OCR CHAIN TEXT" not in text
     assert text.splitlines()[0] == RESUME_PAGES[0][0]
     assert "References available on request" in text
+
+
+def test_new_profile_fields_are_normalised():
+    from app.profile_schemas import BONCProfileExtraction
+
+    p = BONCProfileExtraction.model_validate({
+        "education_and_experience": {
+            "experience": [{"company_name": "Acme", "key_outcomes": ["Cut costs 30%", "- Led 5 people", ""]}],
+            "skills": ["Python", "SQL", "python", "Django", "AWS", "Docker", "Kubernetes",
+                       {"name": "Six Sigma", "proficiency": 9, "years": 12}, {"name": "Rust", "proficiency": 42}],
+            "tools": "Jira, Git,  jira",
+            "industry_clusters": ["technology & software", "Not a cluster", "Healthcare & Pharma",
+                                  "Consumer & Retail", "Energy & Utilities"],
+            "languages": ["English", {"language": "Hindi", "proficiency": "mother tongue"}, {"language": "english"}],
+            "certifications": [{"name": "PMP", "expiry_date": "No expiry"}, "AWS SAA", {"issuer": "nameless"}],
+        },
+        "career_preferences": {"work_mode": "Remote", "work_modes": ["hybrid", "remote", "space"],
+                               "target_roles": ["COO"], "open_to_relocation": "yes"},
+    })
+    ee = p.education_and_experience
+    assert ee.experience[0].key_outcomes == "• Cut costs 30%\n• Led 5 people"
+    assert [s.name for s in ee.skills.primary] == ["Python", "SQL", "Django", "AWS", "Docker"]
+    assert [s.name for s in ee.skills.secondary] == ["Kubernetes", "Six Sigma", "Rust"]
+    assert (ee.skills.secondary[1].proficiency, ee.skills.secondary[1].years) == (9, 12.0)
+    assert ee.skills.secondary[2].proficiency is None  # outside 1-10
+    assert ee.tools == ["Jira", "Git"]
+    assert ee.industry_clusters == ["Technology & Software", "Healthcare & Pharma", "Consumer & Retail"]  # max 3
+    assert [(lang.language, lang.proficiency) for lang in ee.languages] == [("English", None), ("Hindi", "Native / Bilingual")]
+    assert [(c.name, c.does_not_expire) for c in ee.certifications] == [("PMP", True), ("AWS SAA", False)]
+    c = p.career_preferences
+    assert (c.work_mode, c.work_modes) == ("Hybrid", ["Hybrid", "Remote"])  # the list order decides
+    single = BONCProfileExtraction.model_validate({"career_preferences": {"work_mode": "On-site"}}).career_preferences
+    assert (single.work_mode, single.work_modes) == ("On-Site", ["On-Site"])
+    assert c.open_to_relocation is False  # only a real boolean counts
