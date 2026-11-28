@@ -3,10 +3,13 @@
 This module knows nothing about embeddings or LLMs. It turns an uploaded file into
 ``ParsedDocument`` (a list of Markdown pages) using a chain of extraction strategies:
 
-    1. marker               Marker (Surya OCR + layout) - best structure, handles scans
-    2. marker_enhanced_ocr  re-render pages, clean them up (contrast/denoise/sharpen), force OCR
+    1. svm                  Structural Vision Model = Marker (Surya OCR + layout) - best structure, handles scans
+    2. svm_enhanced         SVM on re-rendered, cleaned-up pages (contrast/denoise/sharpen), forced OCR
     3. unstructured         Unstructured.io hi_res partitioning
     4. pypdf                plain text layer + heuristic headings (always available, no OCR)
+
+The SVM strategies were called ``marker`` / ``marker_enhanced_ocr``; config still accepts those
+names (see ``app.branding.LEGACY_PARSER_NAMES``). The ``marker`` imports below are the library.
 
 Every attempt gets a quality score. The first attempt that reaches the configured threshold
 wins; otherwise the best attempt is kept and flagged with warnings. Attempts below the
@@ -34,6 +37,7 @@ from app.errors import (
     TooManyPagesError,
     UnsupportedFileTypeError,
 )
+from app.branding import VISION_MODEL_NAME, public_parser_name
 from app.schemas import ParseReport
 from app.services.office_converter import OfficeConverter
 
@@ -67,6 +71,8 @@ class ParsedDocument:
     quality_score: float
     low_text_pages: list[int] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # What users see for ``parser_used`` (see ``public_parser_name``); the real name stays above.
+    parser_shown: str | None = None
 
     @property
     def markdown(self) -> str:
@@ -74,7 +80,7 @@ class ParsedDocument:
 
     def report(self) -> ParseReport:
         return ParseReport(
-            parser_used=self.parser_used,
+            parser_used=self.parser_shown or self.parser_used,
             page_count=len(self.pages),
             quality_score=round(self.quality_score, 3),
             low_text_pages=self.low_text_pages,
@@ -197,12 +203,12 @@ def clean_markdown(md: str) -> str:
 # ---------------------------------------------------------------------------
 # Strategies
 # ---------------------------------------------------------------------------
-_MARKER_PAGE_RE = re.compile(r"\{(\d+)\}-{48}")
+_SVM_PAGE_RE = re.compile(r"\{(\d+)\}-{48}")
 
 
-def split_marker_pages(text: str) -> list[ParsedPage]:
+def split_svm_pages(text: str) -> list[ParsedPage]:
     """Split Marker's ``paginate_output`` Markdown (``{0}------...``) into pages."""
-    parts = _MARKER_PAGE_RE.split(text)
+    parts = _SVM_PAGE_RE.split(text)
     if len(parts) < 3:
         return [ParsedPage(1, text)]
     pages = [ParsedPage(int(pid) + 1, content) for pid, content in zip(parts[1::2], parts[2::2])]
@@ -211,10 +217,11 @@ def split_marker_pages(text: str) -> list[ParsedPage]:
     return pages
 
 
-class MarkerStrategy:
-    """Marker (by the Surya team): layout-aware PDF -> Markdown with built-in OCR."""
+class SvmStrategy:
+    """Structural Vision Model (SVM): Marker (by the Surya team), layout-aware PDF -> Markdown
+    with built-in OCR."""
 
-    name = "marker"
+    name = "svm"
     _models: dict | None = None
     _models_lock = threading.Lock()
 
@@ -230,7 +237,7 @@ class MarkerStrategy:
             if cls._models is None:
                 from marker.models import create_model_dict
 
-                logger.info("Loading Marker/Surya models (first use)...")
+                logger.info("Loading Structural Vision Model weights (Marker/Surya, first use)...")
                 cls._models = create_model_dict()
             return cls._models
 
@@ -239,7 +246,7 @@ class MarkerStrategy:
             # indra_ocr (Marker's OCR engine) reads its UTF-8 model metadata with the locale
             # codec, which fails on Windows (cp1252). Python's UTF-8 mode fixes it.
             raise RuntimeError(
-                "Marker needs Python UTF-8 mode on Windows. Start the server with "
+                "The Structural Vision Model (Marker) needs Python UTF-8 mode on Windows. Start the server with "
                 "'python run_server.py' or 'python -X utf8 -m uvicorn app.main:app'."
             )
         from marker.converters.pdf import PdfConverter
@@ -254,7 +261,7 @@ class MarkerStrategy:
         converter = PdfConverter(artifact_dict=self._artifacts(), config=config)
         rendered = converter(str(pdf_path))
         text, _, _ = text_from_rendered(rendered)
-        return split_marker_pages(text)
+        return split_svm_pages(text)
 
 
 def render_enhanced_pdf(src: Path, dst: Path, dpi: int) -> None:
@@ -278,8 +285,8 @@ def render_enhanced_pdf(src: Path, dst: Path, dpi: int) -> None:
     images[0].save(dst, "PDF", save_all=True, append_images=images[1:], resolution=float(dpi))
 
 
-class EnhancedOcrMarkerStrategy(MarkerStrategy):
-    name = "marker_enhanced_ocr"
+class SvmEnhancedStrategy(SvmStrategy):
+    name = "svm_enhanced"
 
     def __init__(self, dpi: int = 200) -> None:
         super().__init__(force_ocr=True)
@@ -403,8 +410,8 @@ class PyPdfTextStrategy:
 
 def build_strategies(settings: Settings) -> list[ExtractionStrategy]:
     factories = {
-        "marker": lambda: MarkerStrategy(),
-        "marker_enhanced_ocr": lambda: EnhancedOcrMarkerStrategy(dpi=settings.ocr_render_dpi),
+        "svm": lambda: SvmStrategy(),
+        "svm_enhanced": lambda: SvmEnhancedStrategy(dpi=settings.ocr_render_dpi),
         "unstructured": lambda: UnstructuredStrategy(),
         "pypdf": lambda: PyPdfTextStrategy(),
     }
@@ -471,8 +478,10 @@ class DocumentParser:
         min_chars_per_page: int = 200,
         max_pages: int = 500,
         office_converter: OfficeConverter | None = None,
+        vision_model_name: str = VISION_MODEL_NAME,
     ) -> None:
         self._strategies = list(strategies)
+        self.vision_model_name = vision_model_name
         self._office = office_converter or OfficeConverter()
         self.quality_threshold = quality_threshold
         self.min_quality = min_quality
@@ -487,10 +496,18 @@ class DocumentParser:
             min_quality=settings.parse_min_quality,
             min_chars_per_page=settings.min_chars_per_page,
             max_pages=settings.max_pages,
+            vision_model_name=settings.vision_model_name,
         )
 
     def available_strategies(self) -> list[str]:
         return [s.name for s in self._strategies if s.is_available()]
+
+    def public_name(self, name: str) -> str:
+        return public_parser_name(name, self.vision_model_name)
+
+    def public_strategies(self) -> list[str]:
+        """``available_strategies`` as users see them: the two SVM strategies are one entry."""
+        return list(dict.fromkeys(self.public_name(name) for name in self.available_strategies()))
 
     def available_office_backends(self) -> list[str]:
         return self._office.available_backends()
@@ -591,7 +608,7 @@ class DocumentParser:
                 pages = strategy.extract(prepared.path)
             except Exception as exc:
                 logger.warning("Extraction strategy %s failed: %s", strategy.name, exc, exc_info=True)
-                failures.append(f"{strategy.name}: {type(exc).__name__}")
+                failures.append(f"{self.public_name(strategy.name)}: {type(exc).__name__}")
                 continue
 
             pages = [ParsedPage(p.number, clean_markdown(p.markdown)) for p in pages]
@@ -609,9 +626,10 @@ class DocumentParser:
             raise DocumentUnreadableError(
                 "The document is too degraded to extract reliable text. "
                 "Try a higher-resolution scan or the original digital PDF.",
-                details={"quality_score": round(best.quality_score, 3), "parser": best.parser_used},
+                details={"quality_score": round(best.quality_score, 3), "parser": self.public_name(best.parser_used)},
             )
 
+        best.parser_shown = self.public_name(best.parser_used)
         if failures:
             warnings.append(f"Some extraction methods failed: {'; '.join(failures)}.")
         if best.quality_score < self.quality_threshold:

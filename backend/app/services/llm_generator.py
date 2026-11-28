@@ -27,6 +27,7 @@ from typing import Any, AsyncIterator, Callable, Literal, Sequence
 from app.config import Settings
 from app.errors import LLMGenerationError, ModelUnavailableError, PromptTooLongError
 from app.services.chunker import estimate_tokens
+from app.branding import AI_MODEL_NAME
 from app.services.llm_worker import MIN_NEW_TOKENS, worker_main
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,7 @@ class LLMGenerator:
         context_window: int = 8192,
         defaults: GenerationOptions = GenerationOptions(),
         worker_factory: WorkerFactory = spawn_worker_process,
+        display_name: str = AI_MODEL_NAME,
     ) -> None:
         if template not in TEMPLATES:
             raise ValueError(f"Unknown prompt template {template!r}; choose from {sorted(TEMPLATES)}")
@@ -141,6 +143,7 @@ class LLMGenerator:
         self.execution_provider = execution_provider
         self.context_window = context_window
         self.defaults = defaults
+        self.display_name = display_name
         self._render = TEMPLATES[template]
         self._worker_factory = worker_factory
         self._load_lock = threading.Lock()
@@ -172,14 +175,20 @@ class LLMGenerator:
                 top_p=settings.llm_top_p,
                 repetition_penalty=settings.llm_repetition_penalty,
             ),
+            display_name=settings.ai_model_name,
         )
 
     # -- Lifecycle -------------------------------------------------------------
     @property
     def status(self) -> dict[str, str | None]:
+        # /health is public, so it reports the product name ("BONC Astra AI"), never the real model.
+        # BONC Astra AI *is* the Qwen2.5 model: Ollama's ``ollama_model`` (qwen2.5:3b / qwen2.5:3b-cpu)
+        # or the ONNX fallback in ``model_path``. The real one is logged when it loads ("LLM ready
+        # using Ollama provider (...)" / "Starting LLM worker for ..."). "model_path" stays as a key
+        # for older clients of /health.
         active = getattr(self, "_active_provider", self.provider)
-        path_or_model = self.ollama_model if active == "ollama" else str(self.model_path)
-        return {"state": self._state, "error": self._load_error, "provider": active, "model_path": path_or_model}
+        return {"state": self._state, "error": self._load_error, "provider": active,
+                "model_name": self.display_name, "model_path": self.display_name}
 
     def _probe_ollama(self) -> bool:
         """Check if local Ollama server is running and responsive."""

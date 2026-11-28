@@ -51,7 +51,9 @@ async def health(c: Container = Depends(get_container)) -> dict[str, Any]:
     return {
         "status": "ok",
         "llm": c.llm.status,
-        "parsers_available": c.parser.available_strategies(),
+        "vision_model": c.settings.vision_model_name,
+        # The SVM parsers appear under the product name (see app.branding.public_parser_name).
+        "parsers_available": c.parser.public_strategies(),
         "word_converters": c.parser.available_office_backends(),
     }
 

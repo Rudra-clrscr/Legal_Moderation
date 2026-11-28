@@ -1114,8 +1114,8 @@
     <div class="engine-badge-selector">
       <span style="font-size:12px; font-weight:600; color:var(--text-sub);">Inference Engine:</span>
       <select id="engineSelector" class="engine-select" onchange="onEngineChange(this.value)">
-        <option value="auto">⚡ GPU Accelerated (Qwen 2.5 3B)</option>
-        <option value="cpu">💻 CPU Mode (Qwen 2.5 3B / AVX2)</option>
+        <option value="auto">⚡ GPU Accelerated (BONC Astra AI)</option>
+        <option value="cpu">💻 CPU Mode (BONC Astra AI / AVX2)</option>
       </select>
     </div>
 
@@ -1208,7 +1208,7 @@
           <span class="category-badge other" id="activeDocCatBadge">Category</span>
           <span class="badge" id="activeDocPages">0 pages</span>
           <span class="badge badge-success" id="activeDocQuality">Quality: 100%</span>
-          <span class="badge" id="activeDocParser">Parser: Marker</span>
+          <span class="badge" id="activeDocParser">Parser: BONC Astra AI - Structural Vision Model (SVM)</span>
           <span class="badge" id="activeDocStatus">Ready</span>
         </div>
       </div>
@@ -1249,7 +1249,7 @@
       <div class="query-card">
         <textarea class="query-field" id="chatQuestionInput" placeholder="Ask any question regarding contract terms, clauses, liabilities, or termination..."></textarea>
         <div class="query-footer">
-          <div id="llmEngineLabel" style="font-size:11.5px; color:var(--text-sub);">Local RAG Inference via Qwen2.5 &amp; ChromaDB</div>
+          <div id="llmEngineLabel" style="font-size:11.5px; color:var(--text-sub);">Local RAG Inference via BONC Astra AI &amp; ChromaDB</div>
           <button class="btn btn-primary" id="askBtn">Ask Assistant</button>
         </div>
       </div>
@@ -1393,7 +1393,7 @@ const MOCK_DOCUMENTS = [
     category: "payment",
     status: "ready",
     chunk_count: 25,
-    parse_report: { parser_used: "marker", page_count: 11, quality_score: 0.91 }
+    parse_report: { parser_used: "BONC Astra AI - Structural Vision Model (SVM)", page_count: 11, quality_score: 0.91 }
   },
   {
     doc_id: "doc-legal-2",
@@ -1402,7 +1402,7 @@ const MOCK_DOCUMENTS = [
     category: "payment",
     status: "ready",
     chunk_count: 35,
-    parse_report: { parser_used: "marker", page_count: 18, quality_score: 0.985 }
+    parse_report: { parser_used: "BONC Astra AI - Structural Vision Model (SVM)", page_count: 18, quality_score: 0.985 }
   },
   {
     doc_id: "doc-norm-1",
@@ -1411,7 +1411,7 @@ const MOCK_DOCUMENTS = [
     category: "research",
     status: "ready",
     chunk_count: 56,
-    parse_report: { parser_used: "marker", page_count: 14, quality_score: 0.926 }
+    parse_report: { parser_used: "BONC Astra AI - Structural Vision Model (SVM)", page_count: 14, quality_score: 0.926 }
   },
   {
     doc_id: "doc-norm-2",
@@ -1420,7 +1420,7 @@ const MOCK_DOCUMENTS = [
     category: "tech",
     status: "ready",
     chunk_count: 17,
-    parse_report: { parser_used: "marker", page_count: 7, quality_score: 0.947 }
+    parse_report: { parser_used: "BONC Astra AI - Structural Vision Model (SVM)", page_count: 7, quality_score: 0.947 }
   },
   {
     doc_id: "doc-norm-3",
@@ -1429,7 +1429,7 @@ const MOCK_DOCUMENTS = [
     category: "guide",
     status: "ready",
     chunk_count: 10,
-    parse_report: { parser_used: "marker", page_count: 7, quality_score: 0.952 }
+    parse_report: { parser_used: "BONC Astra AI - Structural Vision Model (SVM)", page_count: 7, quality_score: 0.952 }
   }
 ];
 
@@ -1710,8 +1710,8 @@ function updateEngineUI() {
   const engineEl = $('llmEngineLabel');
   if (engineEl) {
     engineEl.textContent = isCpu
-      ? 'Local Inference via Qwen 2.5 3B (💻 CPU Mode / AVX2) & ChromaDB'
-      : 'Local Inference via Qwen 2.5 3B (⚡ GPU Accelerated) & ChromaDB';
+      ? 'Local Inference via BONC Astra AI (💻 CPU Mode / AVX2) & ChromaDB'
+      : 'Local Inference via BONC Astra AI (⚡ GPU Accelerated) & ChromaDB';
   }
 }
 
@@ -2054,8 +2054,8 @@ async function checkHealth() {
       const h = await res.json();
       dot.className = 'dot online';
       const providerLabel = h.llm?.provider === 'ollama'
-        ? `Ollama (${h.llm?.model_path || 'Qwen2.5 3B'})`
-        : (h.llm?.provider === 'onnx' ? 'DirectML GPU' : (h.llm?.state || 'ready'));
+        ? (h.llm?.model_name || 'BONC Astra AI')
+        : (h.llm?.provider === 'onnx' ? `${h.llm?.model_name || 'BONC Astra AI'} · DirectML GPU` : (h.llm?.state || 'ready'));
       text.textContent = `Online (${providerLabel})`;
       isOfflineMode = false;
       updateEngineUI();
@@ -2141,7 +2141,7 @@ function updateActiveDocView(doc) {
 
   $('activeDocPages').textContent = `${doc.parse_report?.page_count || (isReady ? 1 : '?')} pages`;
   $('activeDocQuality').textContent = doc.parse_report ? `Quality: ${((doc.parse_report.quality_score || 0) * 100).toFixed(0)}%` : 'Quality: Pending';
-  $('activeDocParser').textContent = `Parser: ${doc.parse_report?.parser_used || (isProc ? 'OCR running…' : 'None')}`;
+  $('activeDocParser').textContent = `Parser: ${doc.parse_report?.parser_used || (isProc ? 'Structural Vision Model running…' : 'None')}`;
 
   const statusEl = $('activeDocStatus');
   if (isReady) {
@@ -2176,14 +2176,14 @@ function updateActiveDocView(doc) {
       <span class="spinner"></span>
       <div>
         <strong>Document is currently being processed</strong>
-        <div>Running Marker OCR extraction, document chunking, and ChromaDB vector indexing. This page updates automatically when ready (typically 10–25s).</div>
+        <div>Running BONC Astra AI - Structural Vision Model (SVM) extraction, document chunking, and ChromaDB vector indexing. This page updates automatically when ready (typically 10–25s).</div>
       </div>`;
     notice.classList.remove('hidden');
   } else if (isFail) {
     notice.className = 'status-notice error';
     notice.innerHTML = `
       <div>
-        <strong>Document Processing Failed:</strong> ${esc(doc.error?.message || 'Could not parse or OCR this document.')}
+        <strong>Document Processing Failed:</strong> ${esc(doc.error?.message || 'Could not parse or read this document with the Structural Vision Model (SVM).')}
       </div>`;
     notice.classList.remove('hidden');
   } else {
@@ -2742,7 +2742,7 @@ $('uploadForm').onsubmit = async (e) => {
       localStorage.setItem('cat_' + doc.doc_id, catSelect.value);
     }
 
-    feedback.textContent = "Uploaded! Processing OCR & indexing in background...";
+    feedback.textContent = "Uploaded! Processing with the Structural Vision Model (SVM) & indexing in background...";
     fileInput.value = '';
     pwInput.value = '';
     catSelect.value = 'auto';
