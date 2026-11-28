@@ -125,6 +125,14 @@ def test_upload_chat_risks_summary_flow(env, contract_pdf):
     assert doc_id not in container.vector_store.chunks
 
 
+def test_health_shows_product_names_not_parser_or_model_names(env):
+    client, _ = env
+    health = client.get("/api/health").json()
+    assert health["vision_model"] == "BONC Astra AI - Structural Vision Model (SVM)"
+    assert health["parsers_available"] == ["pypdf"]  # the SVM ones are covered in test_document_parser
+    assert "svm_enhanced" not in str(health) and "marker" not in str(health).lower() and "qwen" not in str(health).lower()
+
+
 def test_password_errors_are_immediate(env, contract_pdf):
     client, _ = env
     locked = encrypt_pdf(contract_pdf, "pw123")

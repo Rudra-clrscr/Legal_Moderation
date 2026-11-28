@@ -6,8 +6,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.branding import AI_MODEL_NAME, LEGACY_PARSER_NAMES, VISION_MODEL_NAME
 
 
 class Settings(BaseSettings):
@@ -23,8 +25,15 @@ class Settings(BaseSettings):
     # Strategies are tried in order. The first one whose output reaches
     # ``parse_quality_threshold`` wins; otherwise the best-scoring attempt is used.
     parser_strategies: list[str] = Field(
-        default_factory=lambda: ["marker", "marker_enhanced_ocr", "unstructured", "pypdf"]
+        default_factory=lambda: ["svm", "svm_enhanced", "unstructured", "pypdf"]
     )
+
+    @field_validator("parser_strategies")
+    @classmethod
+    def _accept_legacy_parser_names(cls, value: list[str]) -> list[str]:
+        # .env files written before the rename still say "marker" / "marker_enhanced_ocr".
+        return list(dict.fromkeys(LEGACY_PARSER_NAMES.get(name, name) for name in value))
+
     parse_quality_threshold: float = 0.6
     parse_min_quality: float = 0.15  # below this the document is rejected as unreadable
     min_chars_per_page: int = 200
@@ -42,6 +51,15 @@ class Settings(BaseSettings):
     chroma_collection: str = "legal_chunks"
     retrieval_top_k: int = 3  # 3 high-relevance chunks optimizes prompt speed and avoids CPU prefill lag
     risk_queries_top_k: int = 3
+
+    # --- Product names shown to users (full mapping to the real models: app/branding.py) ---
+    # "BONC Astra AI" is the Qwen2.5 LLM: ``ollama_model`` (qwen2.5:3b, qwen2.5:3b-cpu for resume
+    # autofill) or the ONNX fallback in ``llm_model_path``. The UI and /health show only this name.
+    ai_model_name: str = AI_MODEL_NAME
+    # "Structural Vision Model (SVM)" is the Marker (Surya) layout + OCR chain, i.e. the
+    # ``svm`` / ``svm_enhanced`` parsers in ``parser_strategies`` (formerly ``marker`` /
+    # ``marker_enhanced_ocr``, still accepted).
+    vision_model_name: str = VISION_MODEL_NAME
 
     # --- LLM Providers & Inference -----------------------------------------
     # "auto" detects if local Ollama is active on port 11434 (sub-second latency & 50+ tok/s).
@@ -71,7 +89,8 @@ class Settings(BaseSettings):
     summary_reduce_max_new_tokens: int = 1200
 
     # --- Profile extraction -------------------------------------------------
-    profile_max_new_tokens: int = 2048
+    # Long resumes (6+ roles) need ~2.5k output tokens; the limit only costs time when used.
+    profile_max_new_tokens: int = 3072
     # Use a PDF's own text layer for resumes when it passes the parse quality gate; scanned
     # resumes (and False here) use the same OCR chain as legal/normal documents.
     profile_prefer_text_layer: bool = True

@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
+
+from app.branding import public_parser_name, public_parser_text
 
 DISCLAIMER = (
     "This is an automated legal analysis based on the provided document text. "
@@ -29,9 +31,16 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"
 
 
+# Reports and errors are shown to users, so the SVM parsers appear under the product name
+# (see app.branding). The validators also rename records saved before the rename ("marker").
 class ErrorInfo(BaseModel):
     code: str
     message: str
+
+    @field_validator("message")
+    @classmethod
+    def _public_message(cls, value: str) -> str:
+        return public_parser_text(value)
 
 
 class ParseReport(BaseModel):
@@ -40,6 +49,16 @@ class ParseReport(BaseModel):
     quality_score: float
     low_text_pages: list[int] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+    @field_validator("parser_used")
+    @classmethod
+    def _public_parser(cls, value: str) -> str:
+        return public_parser_name(value)
+
+    @field_validator("warnings")
+    @classmethod
+    def _public_warnings(cls, value: list[str]) -> list[str]:
+        return [public_parser_text(w) for w in value]
 
 
 class DocumentInfo(BaseModel):

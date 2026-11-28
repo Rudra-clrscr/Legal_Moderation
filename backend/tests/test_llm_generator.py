@@ -106,6 +106,18 @@ def test_stream_yields_tokens_and_strips_special(tmp_path):
     assert llm.status["state"] == "ready"
 
 
+def test_status_reports_the_product_name_not_the_model_file(tmp_path):
+    from app.config import Settings
+
+    settings = Settings()
+    assert settings.ai_model_name == "BONC Astra AI"
+    assert settings.vision_model_name == "BONC Astra AI - Structural Vision Model (SVM)"
+    assert LLMGenerator.from_settings(settings).status["model_name"] == "BONC Astra AI"
+    status = make_llm(tmp_path, thread_worker(make_fake_og([])[0])).status
+    assert status["model_name"] == status["model_path"] == "BONC Astra AI"
+    assert "qwen" not in str(status).lower() and str(tmp_path) not in str(status)
+
+
 def test_early_close_cancels_and_next_request_is_clean(tmp_path):
     og, stats = make_fake_og([f"t{i} " for i in range(5000)], step_delay=0.002)
     llm = make_llm(tmp_path, thread_worker(og))

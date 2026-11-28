@@ -16,21 +16,25 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import json
 import logging
 import multiprocessing
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Literal, Sequence
 
 from app.config import Settings
 from app.errors import LLMGenerationError, ModelUnavailableError, PromptTooLongError
 from app.services.chunker import estimate_tokens
+from app.branding import AI_MODEL_NAME
 from app.services.llm_worker import MIN_NEW_TOKENS, worker_main
 
 logger = logging.getLogger(__name__)
 
 _SPECIAL_TOKENS = ("<|im_end|>", "<|endoftext|>", "<|im_start|>", "</s>")
+# Keep the model loaded between uploads: a cold load adds ~5 s to the next request.
+_OLLAMA_KEEP_ALIVE = "30m"
 _LOAD_TIMEOUT_S = 900
 
 
@@ -48,6 +52,9 @@ class GenerationOptions:
     repetition_penalty: float = 1.05
     engine: Literal["auto", "gpu", "cpu"] = "auto"
     json_mode: bool = False
+    # Ollama only: constrain the reply to this JSON schema (implies json_mode). Other engines
+    # fall back to plain JSON mode.
+    json_schema: dict[str, Any] | None = field(default=None, hash=False, compare=False)
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +132,7 @@ class LLMGenerator:
         context_window: int = 8192,
         defaults: GenerationOptions = GenerationOptions(),
         worker_factory: WorkerFactory = spawn_worker_process,
+        display_name: str = AI_MODEL_NAME,
     ) -> None:
         if template not in TEMPLATES:
             raise ValueError(f"Unknown prompt template {template!r}; choose from {sorted(TEMPLATES)}")
@@ -135,6 +143,7 @@ class LLMGenerator:
         self.execution_provider = execution_provider
         self.context_window = context_window
         self.defaults = defaults
+        self.display_name = display_name
         self._render = TEMPLATES[template]
         self._worker_factory = worker_factory
         self._load_lock = threading.Lock()
@@ -149,7 +158,6 @@ class LLMGenerator:
         self._state: Literal["not_loaded", "loading", "ready", "error"] = "not_loaded"
         self._load_error: str | None = None
         self._active_provider: str = provider
-        self._ollama_client: Any = None
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "LLMGenerator":
@@ -167,14 +175,20 @@ class LLMGenerator:
                 top_p=settings.llm_top_p,
                 repetition_penalty=settings.llm_repetition_penalty,
             ),
+            display_name=settings.ai_model_name,
         )
 
     # -- Lifecycle -------------------------------------------------------------
     @property
     def status(self) -> dict[str, str | None]:
+        # /health is public, so it reports the product name ("BONC Astra AI"), never the real model.
+        # BONC Astra AI *is* the Qwen2.5 model: Ollama's ``ollama_model`` (qwen2.5:3b / qwen2.5:3b-cpu)
+        # or the ONNX fallback in ``model_path``. The real one is logged when it loads ("LLM ready
+        # using Ollama provider (...)" / "Starting LLM worker for ..."). "model_path" stays as a key
+        # for older clients of /health.
         active = getattr(self, "_active_provider", self.provider)
-        path_or_model = self.ollama_model if active == "ollama" else str(self.model_path)
-        return {"state": self._state, "error": self._load_error, "provider": active, "model_path": path_or_model}
+        return {"state": self._state, "error": self._load_error, "provider": active,
+                "model_name": self.display_name, "model_path": self.display_name}
 
     def _probe_ollama(self) -> bool:
         """Check if local Ollama server is running and responsive."""
@@ -301,49 +315,77 @@ class LLMGenerator:
         return len(self._tokenizer.encode(text, add_special_tokens=False).ids)
 
     # -- Generation ------------------------------------------------------------------
-    def _get_ollama_client(self):
-        if self._ollama_client is None:
-            from openai import AsyncOpenAI
+    async def warm_up(self) -> None:
+        """Load the model before the first request needs it (a cold load costs ~5 s).
 
-            v1_url = f"{self.ollama_base_url.rstrip('/')}/v1"
-            self._ollama_client = AsyncOpenAI(base_url=v1_url, api_key="ollama", timeout=120.0)
-        return self._ollama_client
+        Only Ollama needs this: the ONNX worker loads in ``ensure_ready``. The options must
+        match ``_stream_ollama``'s or the first real request reloads the model anyway.
+        """
+        await self.ensure_ready()
+        if getattr(self, "_active_provider", None) != "ollama":
+            return
+        import httpx
+
+        body = {"model": self.ollama_model, "prompt": "", "keep_alive": _OLLAMA_KEEP_ALIVE,
+                "options": {"num_ctx": self.context_window}}
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
+            await client.post(f"{self.ollama_base_url.rstrip('/')}/api/generate", json=body)
 
     async def _stream_ollama(
         self, messages: Sequence[ChatMessage], options: GenerationOptions
     ) -> AsyncIterator[str]:
-        client = self._get_ollama_client()
-        formatted = [{"role": m.role, "content": m.content} for m in messages]
-        # Always the full window: Ollama's default context silently cuts long prompts, and a
-        # num_ctx that varies per request forces a model reload (3-5 s on CPU) on every change.
+        # Ollama's native /api/chat: its OpenAI-compatible /v1 endpoint ignores "options", which
+        # left every request on the default 4096-token context (long resumes were cut off) and
+        # reloaded the model whenever a native call used a different context.
+        import httpx
+
+        # Always the full window: a num_ctx that varies per request forces a model reload.
         ollama_opts: dict[str, Any] = {
             "num_ctx": self.context_window,
+            "num_predict": options.max_new_tokens,
+            "temperature": options.temperature,
+            "top_p": options.top_p,
             "repeat_penalty": options.repetition_penalty,
         }
         if options.engine == "cpu":
             ollama_opts["num_gpu"] = 0
         elif options.engine == "gpu":
             ollama_opts["num_gpu"] = 99
-        create_kwargs: dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": self.ollama_model,
-            "messages": formatted,
+            "messages": [{"role": m.role, "content": m.content} for m in messages],
             "stream": True,
-            "temperature": options.temperature,
-            "top_p": options.top_p,
-            "max_tokens": options.max_new_tokens,
-            "extra_body": {"options": ollama_opts, "keep_alive": "10m"},
+            "options": ollama_opts,
+            "keep_alive": _OLLAMA_KEEP_ALIVE,
         }
-        if options.json_mode:
-            create_kwargs["response_format"] = {"type": "json_object"}
+        if options.json_schema is not None:
+            body["format"] = options.json_schema
+        elif options.json_mode:
+            body["format"] = "json"
         try:
-            resp = await client.chat.completions.create(**create_kwargs)
-            async for chunk in resp:
-                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                    piece = chunk.choices[0].delta.content
+            # Leaving this block (also when a consumer stops early) closes the HTTP stream, so
+            # Ollama stops generating.
+            async with httpx.AsyncClient(
+                base_url=self.ollama_base_url.rstrip("/"), timeout=httpx.Timeout(120.0, connect=5.0)
+            ) as client, client.stream("POST", "/api/chat", json=body) as resp:
+                if resp.status_code != 200:
+                    detail = (await resp.aread()).decode("utf-8", "replace")[:300]
+                    raise LLMGenerationError(f"Ollama returned HTTP {resp.status_code}: {detail}")
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    chunk = json.loads(line)
+                    if chunk.get("error"):
+                        raise LLMGenerationError(f"Ollama generation failed: {chunk['error']}")
+                    piece = (chunk.get("message") or {}).get("content") or ""
                     for tok in _SPECIAL_TOKENS:
                         piece = piece.replace(tok, "")
                     if piece:
                         yield piece
+                    if chunk.get("done"):
+                        break
+        except LLMGenerationError:
+            raise
         except Exception as exc:
             logger.exception("Ollama generation error: %s", exc)
             raise LLMGenerationError(f"Ollama generation failed: {exc}") from exc

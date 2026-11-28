@@ -13,7 +13,7 @@ from app.services.document_parser import (
     ParsedPage,
     PyPdfTextStrategy,
     assess_quality,
-    split_marker_pages,
+    split_svm_pages,
     text_layer_to_markdown,
 )
 from tests.conftest import encrypt_pdf
@@ -53,8 +53,8 @@ def test_quality_scores_separate_text_from_garbage():
 
 
 def test_fallback_chain_skips_failures_and_stops_at_good_result(tmp_path, contract_pdf):
-    first = FakeStrategy("marker", error=RuntimeError("model crash"))
-    second = FakeStrategy("marker_enhanced_ocr", pages=[ParsedPage(1, GARBAGE)])
+    first = FakeStrategy("svm", error=RuntimeError("model crash"))
+    second = FakeStrategy("svm_enhanced", pages=[ParsedPage(1, GARBAGE)])
     third = FakeStrategy("unstructured", pages=[ParsedPage(1, GOOD_TEXT)])
     fourth = FakeStrategy("pypdf", pages=[ParsedPage(1, GOOD_TEXT)])
     unavailable = FakeStrategy("missing", available=False)
@@ -65,7 +65,25 @@ def test_fallback_chain_skips_failures_and_stops_at_good_result(tmp_path, contra
 
     assert result.parser_used == "unstructured"
     assert fourth.calls == 0 and unavailable.calls == 0
-    assert any("marker: RuntimeError" in w for w in result.warnings)
+    assert any(f"{SVM}: RuntimeError" in w for w in result.warnings)
+    assert not any("svm:" in w for w in result.warnings)
+    assert result.report().parser_used == "unstructured"  # text-layer parsers keep their names
+
+
+SVM = "BONC Astra AI - Structural Vision Model (SVM)"
+
+
+def test_svm_parsers_are_reported_under_the_product_name(tmp_path, contract_pdf):
+    """Users see the product name; ParsedDocument.parser_used (logs) keeps the strategy id."""
+    parser = DocumentParser([FakeStrategy("svm_enhanced", pages=[ParsedPage(1, GOOD_TEXT)])])
+    result = parser.parse(parser.prepare(write(tmp_path, "a.pdf", contract_pdf), tmp_path))
+    assert result.parser_used == "svm_enhanced"
+    assert result.report().parser_used == SVM
+    failing = DocumentParser([FakeStrategy("svm", error=RuntimeError("x")), FakeStrategy("pypdf", error=ValueError("y"))])
+    with pytest.raises(DocumentUnreadableError) as err:
+        failing.parse(failing.prepare(write(tmp_path, "b.pdf", contract_pdf), tmp_path))
+    assert f"{SVM}: RuntimeError; pypdf: ValueError" in str(err.value) and "svm:" not in str(err.value)
+    assert DocumentParser([FakeStrategy("svm"), FakeStrategy("svm_enhanced"), FakeStrategy("pypdf")]).public_strategies() == [SVM, "pypdf"]
 
 
 def test_degraded_document_is_rejected(tmp_path, contract_pdf):
@@ -128,9 +146,9 @@ def test_text_layer_rejoins_wrapped_lines():
     assert md == "## 1. TERM\n\nThe term of this Agreement is twelve months from signature."
 
 
-def test_split_marker_pages():
+def test_split_svm_pages():
     text = "{0}" + "-" * 48 + "\n\n# Title\n\nIntro\n\n{1}" + "-" * 48 + "\n\nSecond page"
-    pages = split_marker_pages(text)
+    pages = split_svm_pages(text)
     assert [(p.number, p.markdown.strip()) for p in pages] == [(1, "# Title\n\nIntro"), (2, "Second page")]
 
 
@@ -182,3 +200,44 @@ def test_clean_markdown_collapses_padded_tables_and_trivial_math():
     assert "$" not in cleaned
     assert "  " not in cleaned
     assert len(cleaned) < 60
+
+
+def test_clean_markdown_turns_ocr_text_math_back_into_text():
+    from app.services.document_parser import clean_markdown
+
+    # Marker OCR output for small or spaced-out lines on scanned resumes.
+    md = (
+        "QA Engineer Zilkalns $\\mathrm { ~ \\scriptsize ~ O c t ~ 2 0 2 2 - M a y ~ 2 0 2 4 }$ Riga\n"
+        "mail@example.com · +1 $5 5 5 - o 1 6 7 \\cdot \\mathrm { R i g a , L a t v i a \\cdot D O B : 2 o }$ Apr 1996"
+    )
+    assert clean_markdown(md) == (
+        "QA Engineer Zilkalns Oct 2022-May 2024 Riga\n"
+        "mail@example.com · +1 555-0167 · Riga, Latvia · DOB: 20 Apr 1996"
+    )
+    # Real formulas are not touched.
+    for formula in ("$E = mc^2$", "$x_1 + x_2$", "$\\frac { a } { b }$"):
+        assert formula in clean_markdown(f"see {formula} here")
+
+
+def test_reports_saved_before_the_rename_load_with_the_product_names():
+    from app.schemas import ErrorInfo, ParseReport
+
+    report = ParseReport.model_validate({"parser_used": "marker", "page_count": 1, "quality_score": 0.9,
+                                         "warnings": ["Some extraction methods failed: marker_enhanced_ocr: OSError."]})
+    assert report.parser_used == SVM
+    assert report.warnings == [f"Some extraction methods failed: {SVM}: OSError."]
+    error = ErrorInfo(code="DOCUMENT_UNREADABLE", message="The document could not be read (marker: RuntimeError; pypdf: ValueError).")
+    assert error.message == f"The document could not be read ({SVM}: RuntimeError; pypdf: ValueError)."
+
+
+def test_old_marker_strategy_names_in_env_files_still_work(monkeypatch):
+    """.env files from before the rename list "marker" / "marker_enhanced_ocr"."""
+    from app.config import Settings
+    from app.services.document_parser import SvmEnhancedStrategy, SvmStrategy, build_strategies
+
+    monkeypatch.setenv("LEGAL_PARSER_STRATEGIES", '["marker", "marker_enhanced_ocr", "svm", "pypdf"]')
+    settings = Settings(_env_file=None)
+    assert settings.parser_strategies == ["svm", "svm_enhanced", "pypdf"]
+    strategies = build_strategies(settings)
+    assert [type(s) for s in strategies[:2]] == [SvmStrategy, SvmEnhancedStrategy]
+    assert Settings(_env_file=None, parser_strategies=["unstructured"]).parser_strategies == ["unstructured"]

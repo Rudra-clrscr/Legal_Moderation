@@ -4,6 +4,21 @@ A local RAG backend that reads contracts (including scanned ones), answers quest
 validated citations, and produces map-reduce summaries. Everything runs on your machine: Marker OCR,
 `bge-small-en-v1.5` embeddings, ChromaDB, and a 4-bit ONNX 7B model through `onnxruntime-genai`.
 
+### Product names
+
+Users and `/health` see product names, not the underlying models. This README uses the real names.
+
+| Shown as | Is actually | Setting |
+|---|---|---|
+| **BONC Astra AI** | The Qwen2.5 LLM: Ollama `qwen2.5:3b` (`qwen2.5:3b-cpu` for resume autofill), or the ONNX fallback | `ai_model_name` |
+| **BONC Astra AI - Structural Vision Model (SVM)** | Marker (Surya) layout + OCR: the `svm` / `svm_enhanced` parsers (formerly `marker` / `marker_enhanced_ocr`, still accepted) | `vision_model_name` |
+
+The real model is written to the server log when it loads (`LLM ready using Ollama provider (...)`).
+Every user-facing output names the Marker parsers as the SVM: `/health` `parsers_available`, document
+`parse_report.parser_used` and warnings, and error messages (records saved earlier are renamed on load).
+In code the parsers are `SvmStrategy` / `SvmEnhancedStrategy`; the `marker` library imports, the Ollama model
+tag and the `models/qwen2.5-*` folders keep their real names. The mapping lives in `backend/app/branding.py`.
+
 ## Layout
 
 ```
@@ -147,8 +162,8 @@ The tests use stub LLM and vector-store implementations, so they don't need the 
 
    | Order | Strategy | Purpose |
    |---|---|---|
-   | 1 | `marker` | Layout-aware Markdown with OCR for scanned pages |
-   | 2 | `marker_enhanced_ocr` | Re-renders pages, applies contrast/denoise/sharpen, forces OCR (degraded scans) |
+   | 1 | `svm` | Structural Vision Model (Marker): layout-aware Markdown with OCR for scanned pages |
+   | 2 | `svm_enhanced` | Re-renders pages, applies contrast/denoise/sharpen, forces OCR (degraded scans) |
    | 3 | `unstructured` | Unstructured.io `hi_res` (optional install) |
    | 4 | `pypdf` | Text layer only, with heuristic headings (always available) |
 
@@ -231,4 +246,4 @@ all LLM times by roughly 10×.
   model with chat, so they interleave call by call, and a chat request may wait for the current
   map step to finish.
 - Marker's page splitting relies on its `paginate_output` separator format. If a future Marker release
-  changes it, pages collapse to "page 1" (`split_marker_pages` in `document_parser.py`).
+  changes it, pages collapse to "page 1" (`split_svm_pages` in `document_parser.py`).

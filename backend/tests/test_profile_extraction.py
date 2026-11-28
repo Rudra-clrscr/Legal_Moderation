@@ -736,3 +736,193 @@ def test_new_profile_fields_are_normalised():
     single = BONCProfileExtraction.model_validate({"career_preferences": {"work_mode": "On-site"}}).career_preferences
     assert (single.work_mode, single.work_modes) == ("On-Site", ["On-Site"])
     assert c.open_to_relocation is False  # only a real boolean counts
+
+
+def test_repetition_loop_is_cut_short():
+    from app.services.profile_extractor import _is_looping
+
+    looping = '{"education_and_experience": {"skills": [\n' + '"Postman",\n"Git",\n' * 10
+    assert _is_looping(looping)
+    entries = "".join(
+        f'{{\n"company_name": "Co {i}",\n"to_date": null,\n"currently_working_here": false,\n"description": null\n}},\n'
+        for i in range(12)
+    )
+    assert not _is_looping('{"experience": [\n' + entries)
+    # A list item repeating is caught after a few lines, not dozens.
+    assert _is_looping('"tools": [\n"ASP.NET Core",\n' + '"Entity Framework Core",\n' * 4)
+    # Naming a skill in both skills and tools is normal.
+    assert not _is_looping('"skills": [\n"SQL Server",\n"Git"\n],\n"tools": [\n"SQL Server",\n"Git"\n]')
+
+
+def test_ollama_native_chat_sends_context_penalty_and_json_mode(monkeypatch):
+    # The OpenAI-compatible /v1 endpoint ignores "options": the native API must be used so
+    # num_ctx and repeat_penalty actually apply.
+    import asyncio
+    from pathlib import Path
+
+    import httpx
+
+    from app.services import llm_generator as lg
+
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        lines = [{"message": {"content": '{"a"'}, "done": False}, {"message": {"content": ": 1}"}, "done": True}]
+        return httpx.Response(200, content="\n".join(json.dumps(x) for x in lines).encode())
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    llm = lg.LLMGenerator(Path("unused"), provider="ollama", context_window=8192)
+    llm._active_provider = "ollama"
+    opts = lg.GenerationOptions(max_new_tokens=100, temperature=0.0, top_p=1.0, repetition_penalty=1.05, json_mode=True)
+
+    async def collect() -> str:
+        return "".join([p async for p in llm._stream_ollama([lg.ChatMessage("user", "hi")], opts)])
+
+    assert asyncio.run(collect()) == '{"a": 1}'
+    assert seen["path"] == "/api/chat"
+    body = seen["body"]
+    assert body["format"] == "json" and body["stream"] is True
+    assert body["options"] == {"num_ctx": 8192, "num_predict": 100, "temperature": 0.0, "top_p": 1.0, "repeat_penalty": 1.05}
+
+
+def _sse_events(text: str) -> list[tuple[str, dict]]:
+    out = []
+    for block in text.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.splitlines())
+        out.append((lines["event"], json.loads(lines["data"])))
+    return out
+
+
+def test_extract_resume_stream_sends_partials_then_the_same_result(tmp_path, monkeypatch):
+    from app.services import profile_extractor
+
+    monkeypatch.setattr(profile_extractor, "_PARTIAL_INTERVAL_S", 0.0)
+    resume_pdf = make_text_pdf(RESUME_PAGES)
+    # The model writes one value per line; partials are cut at finished lines.
+    container = build_test_container(tmp_path, llm=StubLLM(reply=json.dumps(SAMPLE_LLM_JSON, indent=2)))
+    client = TestClient(create_app(container=container)).__enter__()
+    files = {"file": ("aarav_resume.pdf", resume_pdf, "application/pdf")}
+    res = client.post("/api/profile/extract-resume/stream", files=files)
+    assert res.status_code == 200 and res.headers["content-type"].startswith("text/event-stream")
+    events = _sse_events(res.text)
+    kinds = [k for k, _ in events]
+    assert kinds[:2] == ["stage", "stage"] and [d["stage"] for _, d in events[:2]] == ["reading", "extracting"]
+    assert kinds[-1] == "result" and "partial" in kinds
+    partials = [d for k, d in events if k == "partial"]
+    # Partials grow as the model writes: the name shows up long before the work history.
+    named = next(p for p in partials if p["basic_details"]["first_name"] == "Aarav")
+    assert named["education_and_experience"]["experience"] == []
+    assert all("profile_image" not in p for p in partials)
+    final = events[-1][1]
+    assert final == client.post("/api/profile/extract-resume", files=files).json()
+    assert list(container.settings.tmp_dir.iterdir()) == []
+
+
+def test_extract_resume_skips_alternate_phone_equal_to_primary(tmp_path):
+    container = build_test_container(tmp_path, llm=StubLLM(reply=json.dumps(SAMPLE_LLM_JSON, indent=2)))
+    client = TestClient(create_app(container=container)).__enter__()
+    files = {"file": ("aarav_resume.pdf", make_text_pdf(RESUME_PAGES), "application/pdf")}
+
+    def alternate(res) -> str | None:
+        assert res.status_code == 200, res.text
+        return res.json()["basic_details"]["alternate_phone_number"]
+
+    same = {"primary_phone_number": "9876543210"}  # the resume has "+91 98765 43210"
+    assert alternate(client.post("/api/profile/extract-resume", files=files, data=same)) is None
+    assert alternate(client.post("/api/profile/extract-resume", files=files)) == "+91 98765 43210"
+    other = {"primary_phone_number": "+91 91234 56789"}
+    assert alternate(client.post("/api/profile/extract-resume", files=files, data=other)) == "+91 98765 43210"
+
+    res = client.post("/api/profile/extract-resume/stream", files=files, data=same)
+    events = _sse_events(res.text)
+    assert events[-1][0] == "result"
+    assert all(d["basic_details"]["alternate_phone_number"] is None for k, d in events if k in {"partial", "result"})
+
+
+def test_extract_resume_stream_reports_errors_as_events(tmp_path):
+    container = build_test_container(tmp_path, llm=UnavailableLLM(reply="{}"))
+    with TestClient(create_app(container=container)) as client:
+        res = client.post("/api/profile/extract-resume/stream", files={"file": ("r.pdf", make_text_pdf(RESUME_PAGES), "application/pdf")})
+    events = _sse_events(res.text)
+    assert events[-1][0] == "error" and events[-1][1]["status"] == 503
+    # Upload problems are still plain HTTP errors, before any stream starts.
+    with TestClient(create_app(container=build_test_container(tmp_path))) as client:
+        empty = client.post("/api/profile/extract-resume/stream", files={"file": ("r.pdf", b"", "application/pdf")})
+    assert empty.status_code == 422
+
+
+def test_output_schema_matches_the_prompt_template_key_for_key():
+    # The schema constrains what the model writes; the template shows it. They must agree,
+    # or the model is shown one shape and forced into another.
+    from app.services.profile_extractor import PROFILE_OUTPUT_SCHEMA, build_profile_prompt
+
+    prompt = build_profile_prompt("")
+    start = prompt.index("\n{\n") + 1
+    template = json.loads(prompt[start: prompt.index("\n}\n", start) + 2])
+
+    def shape(node):
+        if isinstance(node, dict) and node.get("type") == "object":
+            return {k: shape(v) for k, v in node["properties"].items()}
+        if isinstance(node, dict) and node.get("type") == "array":
+            item = shape(node["items"])
+            return [item] if isinstance(item, dict) else []
+        return None
+
+    def template_shape(node):
+        if isinstance(node, dict):
+            return {k: template_shape(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [template_shape(node[0])] if node and isinstance(node[0], dict) else []
+        return None
+
+    assert shape(PROFILE_OUTPUT_SCHEMA) == template_shape(template)
+    assert list(shape(PROFILE_OUTPUT_SCHEMA)) == list(template)  # same order: the model writes in order
+
+
+def test_date_ranges_in_one_field_are_split_and_repeated_roles_dropped():
+    from app.profile_schemas import EducationAndExperience
+
+    role = {"company_name": "Acme", "designation": "Engineer", "from_date": "Oct 2013 - May 2016"}
+    ee = EducationAndExperience.model_validate({
+        "experience": [role, dict(role), {"company_name": "Beta", "from_date": "Jan 2021 – Present"},
+                       {"company_name": "Gamma", "from_date": "Oct 2022-May 2024"}],
+        "education": [{"institute_name": "BITS", "to_date": "2005 - 2009"}],
+    })
+    assert [(e.company_name, e.from_date, e.to_date, e.currently_working_here) for e in ee.experience] == [
+        ("Acme", "Oct 2013", "May 2016", False),
+        ("Beta", "Jan 2021", None, True),
+        ("Gamma", "Oct 2022", "May 2024", False),
+    ]
+    assert (ee.education[0].from_date, ee.education[0].to_date) == ("2005", "2009")
+    # ISO dates are single dates, not ranges.
+    ee = EducationAndExperience.model_validate({"experience": [{"company_name": "Acme", "from_date": "2024-05-01"}]})
+    assert (ee.experience[0].from_date, ee.experience[0].to_date) == ("2024-05-01", None)
+
+
+def test_ocr_slips_and_placeholder_values_are_cleaned():
+    from app.profile_schemas import BasicDetails, EducationAndExperience
+
+    assert BasicDetails.model_validate({"alternate_phone_number": "+1 555-o114"}).alternate_phone_number == "+1 555-0114"
+    assert BasicDetails.model_validate({"alternate_phone_number": "98O0012345"}).alternate_phone_number == "9800012345"
+    # Only phone-shaped values are rewritten.
+    assert BasicDetails.model_validate({"alternate_phone_number": "call office"}).alternate_phone_number == "call office"
+    ee = EducationAndExperience.model_validate({
+        "education": [{"institute_name": "IIT Delhi", "from_date": "2 0 1 1", "to_date": "2 0 1 4"},
+                      {"institute_name": "Unknown", "to_date": "2016"}],
+        "experience": [{"company_name": "Acme", "location": "N/A"}],
+    })
+    # The placeholder-only entry is empty once "Unknown" is cleared, so it is dropped.
+    assert [(e.institute_name, e.from_date, e.to_date) for e in ee.education] == [("IIT Delhi", "2011", "2014")]
+    assert ee.experience[0].location is None
+
+
+def test_contact_lines_recovered_from_ocr_when_text_layer_has_none():
+    from app.services.profile_extractor import _contact_lines, _has_contact
+
+    assert not _has_contact("Arjun Verma\n.NET Developer\n07/2026 - Present, Noida\n2019 - 2021")
+    assert _has_contact("call 9000011111") and _has_contact("a.b@gmail.com")
+    ocr = "Arjun Verma\n\narchitecture.\n\n\\$ arjunverma01011990@example.com\n\n9000011111\n\n• Noida, Noida, India\n\n## WORK EXPERIENCE\n"
+    assert _contact_lines(ocr) == ["arjunverma01011990@example.com", "9000011111", "Noida, Noida, India"]
