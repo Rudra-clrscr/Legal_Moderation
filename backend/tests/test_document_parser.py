@@ -182,3 +182,20 @@ def test_clean_markdown_collapses_padded_tables_and_trivial_math():
     assert "$" not in cleaned
     assert "  " not in cleaned
     assert len(cleaned) < 60
+
+
+def test_clean_markdown_turns_ocr_text_math_back_into_text():
+    from app.services.document_parser import clean_markdown
+
+    # Marker OCR output for small or spaced-out lines on scanned resumes.
+    md = (
+        "QA Engineer Zilkalns $\\mathrm { ~ \\scriptsize ~ O c t ~ 2 0 2 2 - M a y ~ 2 0 2 4 }$ Riga\n"
+        "mail@example.com · +1 $5 5 5 - o 1 6 7 \\cdot \\mathrm { R i g a , L a t v i a \\cdot D O B : 2 o }$ Apr 1996"
+    )
+    assert clean_markdown(md) == (
+        "QA Engineer Zilkalns Oct 2022-May 2024 Riga\n"
+        "mail@example.com · +1 555-0167 · Riga, Latvia · DOB: 20 Apr 1996"
+    )
+    # Real formulas are not touched.
+    for formula in ("$E = mc^2$", "$x_1 + x_2$", "$\\frac { a } { b }$"):
+        assert formula in clean_markdown(f"see {formula} here")

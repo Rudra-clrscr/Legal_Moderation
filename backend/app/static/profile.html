@@ -485,13 +485,28 @@
    ====================================================================== */
 const CONFIG = {
   extractUrl: '/api/profile/extract-resume',
+  extractStreamUrl: '/api/profile/extract-resume/stream', // fills fields as they arrive; null → one-shot
+  warmupUrl: '/api/profile/warmup', // loads the model while the user fills the form; null → off
   saveUrl: null,                     // e.g. '/api/profile' (PUT). null → local draft.
   maxResumeMb: 10,
   acceptedExt: ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'webp', 'bmp'],
   extractTimeoutMs: 5 * 60 * 1000,   // local LLM on CPU can be slow
   draftKey: 'bonc.profile.draft.v1',
+  // The signed-in user's registered number, set by the host app (or ?primary_phone= for testing).
+  // Autofill leaves Alternate Phone Number empty when the resume's number is this one.
+  primaryPhone: new URLSearchParams(location.search).get('primary_phone') || null,
 };
 const MOCK = new URLSearchParams(location.search).has('mock');
+
+// Same number regardless of formatting or country prefix: compares the last 10 digits.
+function phoneKey(v) {
+  const digits = String(v ?? '').replace(/\D/g, '');
+  return digits.length >= 7 ? digits.slice(-10) : null;
+}
+function isPrimaryPhone(v) {
+  const key = phoneKey(v);
+  return key !== null && key === phoneKey(CONFIG.primaryPhone);
+}
 
 /* ======================================================================
    Schema enums (BONCProfileExtraction)
@@ -766,7 +781,7 @@ function normalizeProfile(raw) {
 
   const B = o.basic_details;
   B.first_name = str(b.first_name); B.middle_name = str(b.middle_name); B.last_name = str(b.last_name);
-  B.alternate_phone_number = str(b.alternate_phone_number);
+  B.alternate_phone_number = isPrimaryPhone(b.alternate_phone_number) ? null : str(b.alternate_phone_number);
   B.gender = en(b.gender, ENUMS.gender, 'Gender');
   B.primary_address = addr(b.primary_address);
   let seenDefault = false;
@@ -1795,6 +1810,7 @@ function getData() {
 }
 
 async function save() {
+  if (streamBase) return;  // fields are still filling from a resume
   errors = validate();
   renderForms();
   const bad = Object.keys(errors);
@@ -1895,16 +1911,69 @@ function setBusy(on, file) {
   }
 }
 function setUploadProgress(frac) { els.busyBar.firstElementChild.style.width = Math.round(frac * 100) + '%'; els.busyText.textContent = `Uploading… ${Math.round(frac * 100)}%`; }
+let stageText = 'Reading your resume…', busyNote = '';
 function setExtracting() {
   els.busyBar.classList.add('indeterminate');
   els.busyBar.firstElementChild.style.width = '';
   const t0 = Date.now();
   const tick = () => {
     const s = Math.round((Date.now() - t0) / 1000);
-    els.busyText.textContent = `Reading your resume and extracting details… ${s}s` + (s > 20 ? ' · scanned or long resumes can take a minute' : '');
+    els.busyText.textContent = `${stageText} ${s}s` + (busyNote ? ` · ${busyNote}` : s > 20 ? ' · scanned or long resumes can take a minute' : '');
   };
   tick();
+  clearInterval(busyTimer);
   busyTimer = setInterval(tick, 1000);
+}
+const STAGE_TEXT = { reading: 'Reading your resume…', extracting: 'Filling in your details…' };
+
+/* ---------- Streaming autofill: fields fill in while the model is still writing ----------
+   Each partial result is applied to the profile as it was before the upload, so the final
+   result goes through handleExtracted exactly like a one-shot response (undo, markers). */
+let streamBase = null;
+function lockForms(on) {
+  // While fields are filling, edits would be overwritten by the next partial result.
+  for (const t of Object.keys(TABS)) document.getElementById('panel-' + t).inert = on;
+  document.getElementById('saveBtn').disabled = on;
+}
+function restoreStreamBase() {
+  state = clone(streamBase.state);
+  aiPaths = new Set(streamBase.ai);
+  aiItems = new Set(streamBase.items);
+  errors = { ...streamBase.errors };
+  dirty = streamBase.dirty;
+}
+function applyPartial(raw) {
+  if (!streamBase) {
+    streamBase = { state: clone(state), ai: new Set(aiPaths), items: new Set(aiItems), errors: { ...errors }, dirty };
+    lockForms(true);
+  }
+  restoreStreamBase();
+  const res = applyExtraction(raw, { replace: els.replace.checked });
+  renderForms();
+  busyNote = res.filled ? `${res.filled} field${res.filled === 1 ? '' : 's'} filled so far` : '';
+}
+function endStream() {   // back to the profile before the upload (the final result is applied after)
+  if (!streamBase) return;
+  restoreStreamBase();
+  streamBase = null;
+  lockForms(false);
+  renderForms();
+}
+function readSse(text, from, onEvent) {
+  let end;
+  while ((end = text.indexOf('\n\n', from)) >= 0) {
+    const block = text.slice(from, end);
+    from = end + 2;
+    let ev = 'message', data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event: ')) ev = line.slice(7).trim();
+      else if (line.startsWith('data: ')) data += line.slice(6);
+    }
+    let parsed;
+    try { parsed = JSON.parse(data); } catch { continue; /* skip a malformed event */ }
+    onEvent(ev, parsed);
+  }
+  return from;
 }
 
 function startExtraction(file) {
@@ -1922,38 +1991,69 @@ function startExtraction(file) {
     return;
   }
   setBusy(true, file);
+  stageText = STAGE_TEXT.reading;
+  busyNote = '';
   if (MOCK) return runMock(file);
+  sendResume(file, CONFIG.extractStreamUrl || CONFIG.extractUrl);
+}
 
-  xhr = new XMLHttpRequest();
-  xhr.open('POST', CONFIG.extractUrl);
-  xhr.timeout = CONFIG.extractTimeoutMs;
-  xhr.setRequestHeader('Accept', 'application/json');
-  xhr.upload.onprogress = e => { if (e.lengthComputable) setUploadProgress(e.loaded / e.total); };
-  xhr.upload.onload = setExtracting;
-  xhr.onload = () => {
-    const r = xhr; xhr = null; setBusy(false);
-    if (r.status >= 200 && r.status < 300) {
+function sendResume(file, url) {
+  const streaming = url === CONFIG.extractStreamUrl;
+  const req = xhr = new XMLHttpRequest();
+  let seen = 0, final = null, streamErr = null;
+  const isStream = () => (req.getResponseHeader('Content-Type') || '').includes('text/event-stream');
+  const onEvent = (ev, d) => {
+    if (ev === 'partial') applyPartial(d);
+    else if (ev === 'result') final = d;
+    else if (ev === 'error') streamErr = d;
+    else if (ev === 'stage' && STAGE_TEXT[d.stage]) stageText = STAGE_TEXT[d.stage];
+  };
+  req.open('POST', url);
+  req.timeout = CONFIG.extractTimeoutMs;
+  req.setRequestHeader('Accept', streaming ? 'text/event-stream' : 'application/json');
+  req.upload.onprogress = e => { if (e.lengthComputable) setUploadProgress(e.loaded / e.total); };
+  req.upload.onload = setExtracting;
+  req.onprogress = () => { if (req.status === 200 && isStream()) seen = readSse(req.responseText, seen, onEvent); };
+  req.onload = () => {
+    xhr = null;
+    // A backend without the streaming endpoint: send the same file to the one-shot endpoint.
+    if (streaming && (req.status === 404 || req.status === 405)) return sendResume(file, CONFIG.extractUrl);
+    if (req.status >= 200 && req.status < 300 && isStream()) {
+      seen = readSse(req.responseText, seen, onEvent);
+      setBusy(false);
+      endStream();
+      if (final) return handleExtracted(final, file.name, { streamed: true });
+      return renderResult({
+        kind: 'err',
+        title: "We couldn't extract your resume",
+        body: streamErr?.message || 'The connection closed before the result arrived. Please try again.',
+      });
+    }
+    setBusy(false);
+    endStream();
+    if (req.status >= 200 && req.status < 300) {
       let data;
-      try { data = JSON.parse(r.responseText); } catch { return renderResult({ kind: 'err', title: "Couldn't read the response", body: 'The server returned something that is not JSON.' }); }
+      try { data = JSON.parse(req.responseText); } catch { return renderResult({ kind: 'err', title: "Couldn't read the response", body: 'The server returned something that is not JSON.' }); }
       return handleExtracted(data, file.name);
     }
-    const unavailable = r.status === 404 || r.status === 405 || r.status === 501;
+    const unavailable = req.status === 404 || req.status === 405 || req.status === 501;
     renderResult({
       kind: 'err',
       title: unavailable ? 'Resume autofill is not available yet' : "We couldn't extract your resume",
       body: unavailable
-        ? `The server has no resume extraction endpoint at ${CONFIG.extractUrl} (HTTP ${r.status}). If the backend was updated recently, restart it.`
-        : responseErrorSync(r.status, r.responseText),
+        ? `The server has no resume extraction endpoint at ${CONFIG.extractUrl} (HTTP ${req.status}). If the backend was updated recently, restart it.`
+        : responseErrorSync(req.status, req.responseText),
       sample: unavailable,
     });
   };
-  const fail = (title, body) => () => { xhr = null; setBusy(false); renderResult({ kind: title === 'Upload cancelled.' ? 'info' : 'err', title, body }); };
-  xhr.onerror = fail('Network error', 'Check your connection and try again.');
-  xhr.ontimeout = fail('This is taking too long', 'Extraction timed out. Try again, or try a smaller or text-based PDF.');
-  xhr.onabort = fail('Upload cancelled.');
+  const fail = (title, body) => () => { xhr = null; setBusy(false); endStream(); renderResult({ kind: title === 'Upload cancelled.' ? 'info' : 'err', title, body }); };
+  req.onerror = fail('Network error', 'Check your connection and try again.');
+  req.ontimeout = fail('This is taking too long', 'Extraction timed out. Try again, or try a smaller or text-based PDF.');
+  req.onabort = fail('Upload cancelled.');
   const fd = new FormData();
   fd.append('file', file, file.name);
-  xhr.send(fd);
+  if (CONFIG.primaryPhone) fd.append('primary_phone_number', CONFIG.primaryPhone);
+  req.send(fd);
 }
 
 function runMock(file) {
@@ -1980,7 +2080,7 @@ function responseErrorSync(status, text) {
 }
 async function responseError(status, text) { return responseErrorSync(status, text); }
 
-function handleExtracted(data, fileName) {
+function handleExtracted(data, fileName, { streamed = false } = {}) {
   const raw = data?.profile ?? data?.data ?? data;
   const keys = Object.values(TABS);
   if (!raw || typeof raw !== 'object' || !keys.some(k => k in raw)) {
@@ -2003,8 +2103,8 @@ function handleExtracted(data, fileName) {
   undoSnapshot = snapshot;
   dirty = true;
   renderForms();
-  const firstTab = Object.keys(TABS).find(t => res.perSection[TABS[t]]) || 'basic';
-  switchTab(firstTab);
+  // After a streamed fill the user may be watching another tab: leave them there.
+  if (!streamed) switchTab(Object.keys(TABS).find(t => res.perSection[TABS[t]]) || 'basic');
   const parts = Object.entries(TABS).filter(([, s]) => res.perSection[s]).map(([t, s]) => `${document.getElementById('tab-' + t).firstChild.textContent.trim()} (${res.perSection[s]})`);
   if (res.photoFilled) parts.push('Profile Photo');
   renderResult({
@@ -2095,6 +2195,8 @@ const SAMPLE = {
   renderForms();
   switchTab(new URLSearchParams(location.search).get('tab') || 'basic');
   if (MOCK) renderResult({ kind: 'info', title: 'Mock mode', body: 'Uploads are not sent to the server. Any PDF/DOC/DOCX will autofill with sample data.' });
+  // Load the model now so the first upload does not wait for it (best effort).
+  else if (CONFIG.warmupUrl) fetch(CONFIG.warmupUrl, { method: 'POST' }).catch(() => {});
 })();
 
 // Integration hooks for the backend / host app.

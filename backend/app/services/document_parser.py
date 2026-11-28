@@ -144,12 +144,47 @@ _EMPTY_CELLS_RE = re.compile(r"(?:\|\s*){2,}\|")
 _TABLE_RULE_RE = re.compile(r"^\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-*:?\s*$", re.MULTILINE)
 # OCR'd scans often yield trivial LaTeX such as "$-$" or "$\cdot$" for dashes and bullets.
 _TRIVIAL_MATH_RE = re.compile(r"\$\s*(\\?[^\s$A-Za-z0-9]{0,6}|\\[a-z]{2,8})\s*\$")
+# OCR also reads whole lines of small or spaced-out text (dates, phone numbers, contact lines)
+# as inline math: "$\mathrm { ~ O c t ~ 2 0 2 2 - M a y ~ 2 0 2 4 }$". In that output "~" is a
+# real space and plain spaces only separate characters. Spans that use nothing but these
+# text-formatting commands are turned back into text; real formulas are left alone.
+_MATH_SPAN_RE = re.compile(r"\\?\$\$?([^$]{1,400}?)\\?\$\$?")  # also "\$...\$" (escaped by some OCR paths)
+_MATH_CMD_RE = re.compile(r"\\([A-Za-z]+|.)")
+_MATH_TEXT_CMDS = {
+    "mathrm", "text", "textrm", "textbf", "textit", "mathbf", "mathit", "mathsf", "operatorname",
+    "scriptsize", "footnotesize", "small", "tiny", "normalsize", "large", "Large", "displaystyle",
+    "cdot", "bullet", "mid", "sim", "quad", "qquad", "left", "right", ",", ";", ":", "!", " ",
+}
+_MATH_SEPARATORS = {"cdot": " · ", "bullet": " · ", "mid": " | ", "sim": " ~ "}
+_SPACE = "\x00"  # placeholder for a real space while the separator spaces are dropped
+
+
+def _math_to_text(match: re.Match[str]) -> str:
+    body = match.group(1)
+    if "^" in body or "_" in body or any(c not in _MATH_TEXT_CMDS for c in _MATH_CMD_RE.findall(body)):
+        return match.group(0)
+
+    def command(m: re.Match[str]) -> str:
+        name = m.group(1)
+        if name in _MATH_SEPARATORS:
+            return _MATH_SEPARATORS[name].replace(" ", _SPACE)
+        return _SPACE if name in {"quad", "qquad", ",", ";", ":", " "} else " "
+
+    body = _MATH_CMD_RE.sub(command, body).replace("~", _SPACE).replace("{", " ").replace("}", " ")
+    words = body.split()
+    if words and sum(len(w) == 1 for w in words) / len(words) >= 0.6:  # letter-spaced: "O c t"
+        body = "".join(words)
+        body = re.sub(r"(?<=[A-Za-z])([,:;])(?=[A-Za-z0-9])", r"\1" + _SPACE, body)
+    text = re.sub(r"\s+", " ", body.replace(_SPACE, " ")).strip()
+    text = re.sub(r"(?<=\d)[oO]|[oO](?=\d)", "0", text)  # "2o" / "o167": OCR's letter o for zero
+    return f" {text} "
 
 
 def clean_markdown(md: str) -> str:
     md = _SPAN_ANCHOR_RE.sub("", md)
     md = _IMAGE_RE.sub("", md)
     md = _TRIVIAL_MATH_RE.sub(" ", md)
+    md = _MATH_SPAN_RE.sub(_math_to_text, md)
     # Layout models sometimes read scanned text as wide tables padded with hundreds of spaces;
     # the padding wastes embedding and LLM context.
     md = _TABLE_RULE_RE.sub("|---|", md)

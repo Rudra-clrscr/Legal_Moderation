@@ -82,6 +82,9 @@ LANGUAGE_PROFICIENCY_OPTIONS = ("Elementary", "Conversational", "Professional", 
 SKILL_PROFICIENCY_MIN, SKILL_PROFICIENCY_MAX = 1, 10
 MAX_PRIMARY_SKILLS = 5
 MAX_SECONDARY_SKILLS = 15
+# Resume autofill fills at most this many secondary skills; the user can add the rest (up to
+# MAX_SECONDARY_SKILLS) by hand. Product decision, 2026-11-27.
+AUTOFILL_MAX_SECONDARY_SKILLS = 6
 KEY_OUTCOMES_MAX_CHARS = 500
 
 IndustryCluster = Literal[INDUSTRY_CLUSTER_OPTIONS]  # type: ignore[valid-type]
@@ -108,6 +111,10 @@ _ADDRESS_FIELDS = (
 )
 
 
+# Filler the model writes instead of leaving a field null.
+_PLACEHOLDERS = {"unknown", "n/a", "none", "null", "nil", "not specified", "not mentioned", "not available", "not provided"}
+
+
 def _clean_str(value: Any) -> str | None:
     if value is None or isinstance(value, bool):
         return None
@@ -115,8 +122,25 @@ def _clean_str(value: Any) -> str | None:
         return str(value)
     if isinstance(value, str):
         text = value.strip()
-        return text or None
+        return text if text and text.lower() not in _PLACEHOLDERS else None
     return None
+
+
+# OCR reads the digit 0 as the letter o ("+1 555-o114").
+_PHONE_CHARS_RE = re.compile(r"[+\d\s().-]+")
+
+
+def _clean_phone(value: Any) -> str | None:
+    text = _clean_str(value)
+    if text and not _PHONE_CHARS_RE.fullmatch(text):
+        fixed = re.sub(r"(?<=[\d\s-])[oO]|[oO](?=\d)", "0", text)
+        if _PHONE_CHARS_RE.fullmatch(fixed):
+            return fixed
+    return text
+
+
+# OCR letter-spaces years in some layouts: "2 0 1 4".
+_SPACED_YEAR_RE = re.compile(r"\b([12]) (\d) (\d) (\d)\b")
 
 
 def _match_enum(value: Any, options: tuple[str, ...]) -> str | None:
@@ -172,10 +196,36 @@ def _clean_int(value: Any) -> int | None:
     return round(num) if num is not None else None
 
 
+# "Oct 2013 - May 2016", "2005 – 2009", "Oct 2022-May 2024", "Jan 2021 to Present" in one field.
+_RANGE_SPLIT_RE = re.compile(r"\s+(?:-|to|till|until)\s+|\s*[–—]\s*|(?<=\d{4})-(?=[A-Za-z])|(?<=[A-Za-z]\s\d{4})-(?=\d)", re.IGNORECASE)
+_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
+def _split_range(value: str | None) -> tuple[str, str] | None:
+    if not value:
+        return None
+    parts = _RANGE_SPLIT_RE.split(value, maxsplit=1)
+    if len(parts) != 2:
+        return None
+    start, end = parts[0].strip(), parts[1].strip()
+    if _YEAR_RE.search(start) and (_YEAR_RE.search(end) or end.lower() in _ONGOING_TOKENS):
+        return start, end
+    return None
+
+
 def _normalize_period(data: Any, current_flag: str) -> Any:
     if not isinstance(data, dict):
         return data
     out = dict(data)
+    for key in ("from_date", "to_date"):
+        if isinstance(out.get(key), str):
+            out[key] = _SPACED_YEAR_RE.sub(r"\1\2\3\4", out[key])
+    # Small models put a whole date range into one field; split it into from/to.
+    from_date, to_date = _clean_str(out.get("from_date")), _clean_str(out.get("to_date"))
+    if (rng := _split_range(from_date)) and (not to_date or to_date == from_date):
+        out["from_date"], out["to_date"] = rng
+    elif (rng := _split_range(to_date)) and (not from_date or from_date in (rng[0], to_date)):
+        out["from_date"], out["to_date"] = rng
     to_date = _clean_str(out.get("to_date"))
     if to_date and to_date.lower() in _ONGOING_TOKENS:
         out[current_flag] = True
@@ -223,10 +273,15 @@ class BasicDetails(BaseModel):
     primary_address: Address = Field(default_factory=Address)
     additional_addresses: list[AdditionalAddress] = Field(default_factory=list)
 
-    @field_validator("first_name", "middle_name", "last_name", "alternate_phone_number", mode="before")
+    @field_validator("first_name", "middle_name", "last_name", mode="before")
     @classmethod
     def _clean_text(cls, value: Any) -> str | None:
         return _clean_str(value)
+
+    @field_validator("alternate_phone_number", mode="before")
+    @classmethod
+    def _clean_phone_number(cls, value: Any) -> str | None:
+        return _clean_phone(value)
 
     @field_validator("gender", mode="before")
     @classmethod
@@ -564,6 +619,14 @@ def _coerce_model_list(value: Any, model: type[BaseModel], limit: int, scalar_ke
     return out[:limit]
 
 
+_LIST_KEY_ALIASES: dict[str, tuple[str, ...]] = {
+    "skills": ("technical_skills", "key_skills", "core_skills", "skill_set", "skillset", "core_competencies"),
+    "tools": ("tools_and_technologies", "technologies", "frameworks", "tools_and_frameworks"),
+    "languages": ("languages_known", "language_known", "spoken_languages"),
+    "certifications": ("certificates", "certification", "licenses_and_certifications"),
+}
+
+
 class EducationAndExperience(BaseModel):
     education: list[EducationItem] = Field(default_factory=list)
     experience: list[ExperienceItem] = Field(default_factory=list)
@@ -573,6 +636,19 @@ class EducationAndExperience(BaseModel):
     sub_domains: list[str] = Field(default_factory=list)  # Tier 2, free text
     languages: list[LanguageItem] = Field(default_factory=list)
     certifications: list[CertificationItem] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_alias_keys(cls, data: Any) -> Any:
+        # Small models rename keys ("languages_known", "technical_skills"); keep their values.
+        if isinstance(data, dict):
+            data = dict(data)
+            for key, aliases in _LIST_KEY_ALIASES.items():
+                if not data.get(key):
+                    found = next((data[a] for a in aliases if data.get(a)), None)
+                    if found is not None:
+                        data[key] = found
+        return data
 
     @field_validator("skills", mode="before")
     @classmethod
@@ -598,6 +674,8 @@ class EducationAndExperience(BaseModel):
     @field_validator("languages", mode="before")
     @classmethod
     def _coerce_languages(cls, value: Any) -> list[Any]:
+        if isinstance(value, dict):  # {"English": "Fluent", "Hindi": "Native"}
+            value = [{"language": k, "proficiency": v} for k, v in value.items()]
         items = _coerce_model_list(value, LanguageItem, 10, scalar_key="language")
         seen: set[str] = set()
         return [i for i in items if not (i.language.lower() in seen or seen.add(i.language.lower()))]
@@ -623,9 +701,27 @@ class EducationAndExperience(BaseModel):
 
     @model_validator(mode="after")
     def _filter_empty_entries(self) -> "EducationAndExperience":
-        self.education = [e for e in self.education if e.institute_name or e.degree]
-        self.experience = [e for e in self.experience if e.company_name or e.designation]
+        self.education = _unique(
+            [e for e in self.education if e.institute_name or e.degree],
+            lambda e: (e.institute_name, e.degree, e.from_date, e.to_date),
+        )
+        # A repetition loop writes the same role again and again.
+        self.experience = _unique(
+            [e for e in self.experience if e.company_name or e.designation],
+            lambda e: (e.company_name, e.designation, e.from_date, e.to_date),
+        )
         return self
+
+
+def _unique(items: list, key) -> list:
+    seen: set = set()
+    out = []
+    for item in items:
+        k = tuple(_ENUM_KEY_RE.sub("", (v or "").lower()) for v in key(item))
+        if k not in seen:
+            seen.add(k)
+            out.append(item)
+    return out
 
 
 class CareerPreferences(BaseModel):
@@ -716,6 +812,28 @@ class BONCProfileExtraction(BaseModel):
     education_and_experience: EducationAndExperience = Field(default_factory=EducationAndExperience)
     career_preferences: CareerPreferences = Field(default_factory=CareerPreferences)
     profile_image: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_misplaced_lists(cls, data: Any) -> Any:
+        # Skills or languages written at the top level or in an invented section
+        # ("personal_details") belong in education_and_experience.
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        ee = data.get("education_and_experience")
+        ee = dict(ee) if isinstance(ee, dict) else {}
+        sources = [data] + [v for k, v in data.items() if isinstance(v, dict) and k != "education_and_experience"]
+        for key, aliases in _LIST_KEY_ALIASES.items():
+            if any(ee.get(k) for k in (key, *aliases)):
+                continue
+            for src in sources:
+                found = next((src[k] for k in (key, *aliases) if src.get(k)), None)
+                if found is not None:
+                    ee[key] = found
+                    break
+        data["education_and_experience"] = ee
+        return data
 
     @field_validator(
         "basic_details",

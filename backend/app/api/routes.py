@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -183,11 +184,26 @@ _RESUME_SUFFIXES = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg", ".tif", ".
 
 
 # --- BONC Profile ---------------------------------------------------------------------
-@router.post("/profile/extract-resume", response_model=BONCProfileExtraction)
-async def extract_resume(
-    file: UploadFile = File(...),
-    c: Container = Depends(get_container),
-) -> BONCProfileExtraction:
+_warmups: set[asyncio.Task] = set()
+
+
+@router.post("/profile/warmup", status_code=202)
+async def warm_up_profile_model(c: Container = Depends(get_container)) -> dict[str, str]:
+    """Called when the profile page opens, so the model is loaded before a resume is uploaded."""
+
+    async def run() -> None:
+        try:
+            await _profile_extractor(c).warm_up()
+        except Exception as exc:  # best effort: the upload loads the model anyway
+            logger.info("Profile model warm-up skipped: %s", exc)
+
+    task = asyncio.create_task(run())
+    _warmups.add(task)
+    task.add_done_callback(_warmups.discard)
+    return {"status": "warming"}
+
+
+async def _save_resume_upload(file: UploadFile, c: Container) -> Path:
     c.settings.tmp_dir.mkdir(parents=True, exist_ok=True)
     raw_suffix = Path(file.filename or "").suffix.lower()
     suffix = raw_suffix if raw_suffix in _RESUME_SUFFIXES else ""
@@ -204,7 +220,60 @@ async def extract_resume(
                 out.write(chunk)
         if size == 0:
             raise DocumentUnreadableError("The uploaded resume file is empty.")
-        extractor = c.profile_extractor or ProfileExtractionService(c.parser, c.llm, c.settings)
-        return await extractor.extract_from_file(tmp_path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    return tmp_path
+
+
+def _profile_extractor(c: Container) -> ProfileExtractionService:
+    return c.profile_extractor or ProfileExtractionService(c.parser, c.llm, c.settings)
+
+
+@router.post("/profile/extract-resume", response_model=BONCProfileExtraction)
+async def extract_resume(
+    file: UploadFile = File(...),
+    primary_phone_number: str | None = Form(default=None),
+    c: Container = Depends(get_container),
+) -> BONCProfileExtraction:
+    """``primary_phone_number`` (optional) is the user's registered number; an alternate number
+    on the resume that matches it is not filled in."""
+    tmp_path = await _save_resume_upload(file, c)
+    try:
+        return await _profile_extractor(c).extract_from_file(tmp_path, primary_phone=primary_phone_number)
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+@router.post("/profile/extract-resume/stream")
+async def extract_resume_stream(
+    file: UploadFile = File(...),
+    primary_phone_number: str | None = Form(default=None),
+    c: Container = Depends(get_container),
+) -> StreamingResponse:
+    """Server-Sent Events: ``stage`` ({"stage": "reading" | "extracting"}), ``partial`` (the
+    profile so far, without the photo) while the model writes, then ``result`` (the same body
+    as /profile/extract-resume) or ``error`` ({"code", "message", "status"}).
+    ``primary_phone_number`` works as in /profile/extract-resume."""
+    tmp_path = await _save_resume_upload(file, c)
+    extractor = _profile_extractor(c)
+
+    async def events() -> AsyncIterator[str]:
+        stream = extractor.extract_events(tmp_path, primary_phone=primary_phone_number)
+        try:
+            async for event in stream:
+                if event.kind == "stage":
+                    yield format_sse("stage", {"stage": event.stage})
+                else:
+                    data = event.profile.model_dump(mode="json", exclude={"profile_image"} if event.kind == "partial" else None)
+                    yield format_sse(event.kind, data)
+        except LegalBotError as exc:
+            yield format_sse("error", {**exc.to_dict(), "status": exc.status_code})
+        except Exception:
+            logger.exception("Resume extraction stream failed")
+            yield format_sse("error", {"code": "INTERNAL_ERROR", "message": "Unexpected error while reading the resume.", "status": 500})
+        finally:
+            await stream.aclose()
+            tmp_path.unlink(missing_ok=True)
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers=_SSE_HEADERS)
